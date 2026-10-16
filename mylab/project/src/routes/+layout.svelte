@@ -9,7 +9,8 @@
 
 	const nav = [
 		{ label: 'Overview', route: '/', href: resolve('/') },
-		{ label: 'Antibiogram', route: '/antibiogram', href: resolve('/antibiogram') }
+		{ label: 'Antibiogram', route: '/antibiogram', href: resolve('/antibiogram') },
+		{ label: 'Alerts', route: '/alerts', href: resolve('/alerts') }
 	];
 </script>
 
