@@ -1,4 +1,37 @@
-# sv
+# MyLab Reporter – Antibiotic efficacy indicator (AEI)
+
+Rolling, laboratory-based antimicrobial resistance surveillance for Tyks Laboratories × Mylab
+(JunctionX Turku). Built on SvelteKit + Drizzle (SQLite/libSQL), run with bun.
+
+## Getting started
+
+```sh
+bun install
+cp .env.example .env        # set BETTER_AUTH_SECRET
+bun run db:push             # create the tables
+bun run db:seed             # load the synthetic lab extract from data/*.csv (~15 s)
+bun run dev
+```
+
+| Script                           | What it does                                                         |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `bun run db:seed`                | Re-imports `data/*.csv` (idempotent, run it again for a new extract) |
+| `bun run test`                   | Unit tests for the surveillance logic (`tests/`, bun test)           |
+| `bun run check` / `bun run lint` | Type check / prettier + eslint                                       |
+
+## How the numbers are computed
+
+- **First isolate** per patient, organism and specimen type within the reporting period
+  (CLSI M39, THL Finres, WHO GLASS) – `src/lib/amr/firstIsolate.ts`.
+- Percentages are only shown as reliable with **≥ 30 isolates**, with a Wilson 95 % interval –
+  `src/lib/amr/stats.ts`.
+- **Hospital-onset** = inpatient sample taken on hospital day 3 or later (`admission_date`).
+- The server keeps the dataset in memory and polls the database every 30 s; new results written by
+  the laboratory feed appear without a restart – `src/lib/server/amr/dataset.ts`.
+
+---
+
+## About the template (sv)
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
