@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { getDataset } from '#lib/server/amr/dataset.ts';
 import { firstIsolates } from '#lib/amr/firstIsolate.ts';
 import { inRange, surveillanceWindows } from '#lib/amr/dates.ts';
+import { detectAnomalies } from '#lib/amr/anomalies.ts';
 
 export const load: PageServerLoad = async () => {
 	const data = await getDataset();
@@ -26,6 +27,11 @@ export const load: PageServerLoad = async () => {
 			loadedAt: data.loadedAt.toISOString()
 		},
 		recent,
-		byWard
+		byWard,
+		alerts: detectAnomalies(data.isolates, data.lastDate).map((a) => ({
+			id: a.id,
+			severity: a.severity,
+			ward: a.ward
+		}))
 	};
 };

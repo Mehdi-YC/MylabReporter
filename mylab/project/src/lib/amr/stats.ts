@@ -44,6 +44,28 @@ export function poissonUpperTail(k: number, lambda: number): number {
 	return Math.max(0, 1 - cdf);
 }
 
+/** P(X ≥ k) for X ~ Binomial(n, p). */
+export function binomialUpperTail(k: number, n: number, p: number): number {
+	if (k <= 0) return 1;
+	if (k > n) return 0;
+	if (p <= 0) return 0;
+	if (p >= 1) return 1;
+	// Sum the upper tail from P(X = k), built in log space to avoid underflow for large n.
+	let logPmf = logChoose(n, k) + k * Math.log(p) + (n - k) * Math.log(1 - p);
+	let tail = 0;
+	for (let i = k; i <= n; i++) {
+		tail += Math.exp(logPmf);
+		logPmf += Math.log((n - i) / (i + 1)) + Math.log(p / (1 - p));
+	}
+	return Math.min(1, tail);
+}
+
+function logChoose(n: number, k: number): number {
+	let s = 0;
+	for (let i = 1; i <= k; i++) s += Math.log((n - k + i) / i);
+	return s;
+}
+
 export function mean(values: number[]): number {
 	return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 }

@@ -1,10 +1,13 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
 	const fmt = new Intl.NumberFormat('en');
 	const maxIsolates = $derived(Math.max(1, ...data.byWard.map((w) => w.isolates)));
+	const critical = $derived(data.alerts.filter((a) => a.severity === 'critical'));
+	const alertWards = $derived([...new Set(data.alerts.map((a) => a.ward))]);
 </script>
 
 <section class="mb-6">
@@ -14,6 +17,31 @@
 		each ward look like over the last four weeks and the last twelve months.
 	</p>
 </section>
+
+<a
+	href={resolve('/alerts')}
+	class={[
+		'mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4 transition hover:shadow-sm',
+		critical.length
+			? 'border-rose-300 bg-rose-50'
+			: data.alerts.length
+				? 'border-amber-300 bg-amber-50'
+				: 'border-emerald-200 bg-emerald-50'
+	]}
+>
+	<div>
+		<div class="font-semibold">
+			{#if data.alerts.length}
+				{data.alerts.length} active alert{data.alerts.length > 1 ? 's' : ''}
+				({critical.length} critical) in {alertWards.join(', ')}
+			{:else}
+				No active alerts: every ward is within its usual range
+			{/if}
+		</div>
+		<div class="text-sm text-slate-600">Last 4 weeks compared with each ward's previous year</div>
+	</div>
+	<span class="text-sm font-medium text-teal-800">Open alerts →</span>
+</a>
 
 <section class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 	{#each [{ label: 'Cultures', value: fmt.format(data.status.totalCultures) }, { label: 'Isolates', value: fmt.format(data.status.totalIsolates) }, { label: 'Data from', value: data.status.firstDate }, { label: 'Latest sample', value: data.status.lastDate }] as stat (stat.label)}
