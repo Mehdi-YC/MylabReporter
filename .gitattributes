@@ -1,0 +1,4 @@
+# Prettier enforces LF: keep LF in the working tree on every OS (core.autocrlf would
+# otherwise turn files into CRLF on Windows and make `bun run lint` fail).
+* text=auto eol=lf
+*.png binary
