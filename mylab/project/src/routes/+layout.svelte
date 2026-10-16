@@ -7,7 +7,10 @@
 
 	let { children }: LayoutProps = $props();
 
-	const nav = [{ label: 'Overview', href: resolve('/') }];
+	const nav = [
+		{ label: 'Overview', route: '/', href: resolve('/') },
+		{ label: 'Antibiogram', route: '/antibiogram', href: resolve('/antibiogram') }
+	];
 </script>
 
 <svelte:head>
@@ -30,7 +33,7 @@
 						href={item.href}
 						class={[
 							'rounded-md px-3 py-1.5 transition',
-							page.url.pathname === item.href
+							page.route.id === item.route
 								? 'bg-teal-50 font-medium text-teal-800'
 								: 'text-slate-600 hover:bg-slate-100'
 						]}>{item.label}</a
