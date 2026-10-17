@@ -11,6 +11,7 @@ export function makeIsolate(overrides: Partial<IsolateRecord> = {}): IsolateReco
 		patientId: 'P1',
 		sex: 'F',
 		age: 60,
+		homeArea: 'Centre',
 		date: '2026-01-01',
 		ward: 'MED-A',
 		wardType: 'in',

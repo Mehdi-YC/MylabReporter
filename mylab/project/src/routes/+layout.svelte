@@ -12,6 +12,7 @@
 		{ label: 'Antibiogram', route: '/antibiogram', href: resolve('/antibiogram') },
 		{ label: 'Alerts', route: '/alerts', href: resolve('/alerts') },
 		{ label: 'Therapy advisor', route: '/advisor', href: resolve('/advisor') },
+		{ label: 'Map', route: '/map', href: resolve('/map') },
 		{ label: 'Ask', route: '/ask', href: resolve('/ask') }
 	];
 </script>

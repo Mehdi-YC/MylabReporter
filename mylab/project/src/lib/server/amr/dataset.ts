@@ -54,6 +54,7 @@ async function load(version: string): Promise<Dataset> {
 				cultureId: culture.id,
 				patientId: culture.patientId,
 				sex: patient.sex,
+				homeArea: patient.homeArea,
 				age: culture.ageYears,
 				date: culture.sampleDate,
 				admissionDate: culture.admissionDate,
