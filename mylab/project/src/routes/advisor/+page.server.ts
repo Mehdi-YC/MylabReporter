@@ -83,6 +83,13 @@ export const load: PageServerLoad = async ({ url }) => {
 		windows: { recent, annual },
 		context: { isolates: context.length, fallback, recentIsolates: recentIsolates.length },
 		organisms: organismMix(context).slice(0, 6),
+		// Link target for each drug's trend in the antibiogram: the commonest organism tested for it.
+		trendOrganism: Object.fromEntries(
+			options.map((o) => [
+				o.code,
+				organismMix(context.filter((i) => i.results[o.code] !== undefined))[0]?.organism ?? null
+			])
+		),
 		options,
 		best: best?.code ?? null,
 		bestAvailable: fallbackOption?.code ?? null,
