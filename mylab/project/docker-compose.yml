@@ -20,7 +20,7 @@ services:
     # with bun.lock without touching the host's.
     command: sh -c "bun install && bun run dev -- --host 0.0.0.0"
     ports:
-      - '5173:5173'
+      - '5177:5173'
     extra_hosts:
       # Lets the container reach services on the host (Ollama) on Linux too;
       # already resolvable on Docker Desktop.
