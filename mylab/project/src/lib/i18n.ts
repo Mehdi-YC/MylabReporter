@@ -137,6 +137,7 @@ const fi = {
 		latest: 'uusin',
 		counts: (c: number, w: number) => `${c} kriittistä · ${w} varoitusta`,
 		weekEnding: 'viikko päättyy',
+		selectedWeek: (d: string) => `Valittu viikko · päättyy ${d}`,
 		levels: {
 			critical: '● Hälytys',
 			warning: '● Seuranta',
@@ -469,6 +470,7 @@ const en: Messages = {
 		latest: 'latest',
 		counts: (c: number, w: number) => `${c} critical · ${w} warning${w === 1 ? '' : 's'}`,
 		weekEnding: 'week ending',
+		selectedWeek: (d: string) => `Selected week · ending ${d}`,
 		levels: { critical: '● Alert', warning: '● Watch', sentinel: '◆ Sentinel', none: '○ Clear' },
 		none: (d: string) =>
 			`No anomalies in the 4 weeks ending ${d}: every ward is within its usual range.`
