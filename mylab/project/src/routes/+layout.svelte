@@ -6,6 +6,7 @@
 	import { navigating, page } from '$app/state';
 	import { formatDate, formatDateTime, messages } from '#lib/i18n.ts';
 	import AskChat from '#lib/components/AskChat.svelte';
+	import BulletinBell from '#lib/components/BulletinBell.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -86,7 +87,7 @@
 	{@render children()}
 {:else}
 	<div class="min-h-screen bg-slate-50 text-slate-900">
-		<header class="border-b border-slate-200 bg-white">
+		<header class="border-b border-slate-200 bg-white print:hidden">
 			<div
 				class="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 sm:px-8"
 			>
@@ -163,6 +164,7 @@
 						>· {t.dataUntil} {formatDate(data.locale, data.sync.lastDate)}</span
 					>
 				</a>
+				<BulletinBell locale={data.locale} bulletins={data.bulletins} />
 				<a
 					href={resolve('/admin')}
 					class="flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
@@ -194,13 +196,13 @@
 		<main class="mx-auto max-w-[1440px] px-4 pt-6 pb-10 sm:px-8">
 			{@render children()}
 		</main>
-		<footer class="border-t border-slate-200 bg-white">
+		<footer class="border-t border-slate-200 bg-white print:hidden">
 			<div class="mx-auto max-w-[1440px] px-4 pt-4 pb-20 text-xs text-slate-500 sm:px-8">
 				{t.footer}
 			</div>
 		</footer>
 	</div>
 	{#if page.route.id !== '/ask'}
-		<AskChat locale={data.locale} />
+		<div class="print:hidden"><AskChat locale={data.locale} /></div>
 	{/if}
 {/if}

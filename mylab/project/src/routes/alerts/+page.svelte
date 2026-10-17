@@ -71,13 +71,13 @@
 	const LEVEL_CELL = {
 		critical: 'bg-rose-600',
 		warning: 'bg-amber-400',
-		sentinel: 'bg-slate-900',
+		sentinel: 'bg-rose-900',
 		none: 'bg-slate-100 hover:bg-slate-300'
 	};
 	const LEVEL_TILE = {
 		critical: { box: 'border-rose-300 bg-rose-50', text: 'text-rose-700' },
 		warning: { box: 'border-amber-300 bg-amber-50', text: 'text-amber-800' },
-		sentinel: { box: 'border-slate-400 bg-white', text: 'text-slate-900' },
+		sentinel: { box: 'border-rose-300 bg-rose-50', text: 'text-rose-800' },
 		none: { box: 'border-emerald-200 bg-emerald-50/50', text: 'text-emerald-700' }
 	};
 
@@ -206,7 +206,7 @@
 			><span class="size-3 rounded-sm bg-amber-400"></span> {t.alerts.legendWarning}</span
 		>
 		<span class="flex items-center gap-1.5"
-			><span class="size-3 rounded-sm bg-slate-900"></span> {t.alerts.legendSentinel}</span
+			><span class="size-3 rounded-sm bg-rose-900"></span> {t.alerts.legendSentinel}</span
 		>
 		<span>{t.alerts.legendNote}</span>
 	</div>

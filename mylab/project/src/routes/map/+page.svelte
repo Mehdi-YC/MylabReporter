@@ -1,15 +1,27 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { formatDate, messages } from '#lib/i18n.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+
+	const m = $derived(messages[data.locale]);
+	const t = $derived(m.map);
+	const fi = $derived(data.locale === 'fi');
+	const areaName = (area: string) => t.areas[area] ?? area;
+	const specimenName = (s: string) => m.specimens[s as 'urine'] ?? s;
+	const num = (n: number) => n.toLocaleString(fi ? 'fi-FI' : 'en-GB');
 
 	const submit = (e: Event) =>
 		(e.currentTarget as HTMLSelectElement | HTMLInputElement).form?.requestSubmit();
 
 	const isPct = $derived(data.indicator !== 'isolates');
-	const abName = (code: string) => data.antibiotics.find((a) => a.code === code)?.name ?? code;
-	const pct = (v: number | null, digits = 1) => (v === null ? '–' : `${v.toFixed(digits)} %`);
+	const abName = (code: string) => {
+		const a = data.antibiotics.find((x) => x.code === code);
+		return a ? (fi ? a.nameFi : a.name) : code;
+	};
+	const pct = (v: number | null, digits = 1) =>
+		v === null ? '–' : `${fi ? v.toFixed(digits).replace('.', ',') : v.toFixed(digits)} %`;
 
 	/** Sequential ramp, low (teal) → high (rose); same ramp for both maps. */
 	const RAMP = ['#ccfbf1', '#5eead4', '#fde68a', '#fdba74', '#fb7185', '#be123c'];
@@ -45,7 +57,7 @@
 	const dark = (a: Area) =>
 		a.value !== null && a.reliable && a.value / regionMax >= (RAMP.length - 2) / RAMP.length;
 	const areaValue = (a: Area) =>
-		a.value === null ? 'no isolate' : isPct ? pct(a.value) : `${a.value} isolates`;
+		a.value === null ? t.noIsolate : isPct ? pct(a.value) : t.isolatesN(a.value);
 
 	// Stylised catchment around Tyks: Centre disc, four sectors (not real geography).
 	const CX = 230;
@@ -71,12 +83,12 @@
 
 	const indicatorLabel = $derived(
 		data.indicator === 'resistance'
-			? `% of ${data.filter.organism} resistant to ${abName(data.antibiotic)}`
+			? t.indicatorResistance(data.filter.organism ?? '', abName(data.antibiotic))
 			: data.indicator === 'esbl'
-				? `% ESBL among ${data.filter.organism}`
+				? t.indicatorEsbl(data.filter.organism ?? '')
 				: data.indicator === 'mrsa'
-					? '% MRSA among S. aureus'
-					: `First isolates of ${data.filter.organism}`
+					? t.indicatorMrsa
+					: t.indicatorIsolates(data.filter.organism ?? '')
 	);
 
 	// Europe choropleth.
@@ -87,7 +99,8 @@
 	const EU_MAX = EU_STEP * RAMP.length;
 	const euStops = stopsFor(EU_STEP);
 	const finland = $derived(eu.values.find((r) => r.iso3 === 'FIN'));
-	const meta = $derived(eu.indicators.find((i) => i.key === eu.indicator)!);
+	const metaRaw = $derived(eu.indicators.find((i) => i.key === eu.indicator)!);
+	const meta = $derived({ ...metaRaw, ...(t.ears[eu.indicator] ?? {}) });
 	let tip = $state<{ id: string; name: string; x: number; y: number } | null>(null);
 	const tipRow = $derived(tip ? byId.get(tip.id) : undefined);
 
@@ -98,12 +111,8 @@
 </script>
 
 <section class="mb-5">
-	<h1 class="text-2xl font-semibold tracking-tight">Resistance map</h1>
-	<p class="mt-1 max-w-3xl text-slate-600">
-		Where resistance comes from in the hospital's catchment, and how the hospital compares with
-		Europe. The regional view uses the patients' home areas in the laboratory extract; the European
-		view uses national EARS-Net figures published by ECDC.
-	</p>
+	<h1 class="text-2xl font-semibold tracking-tight">{t.title}</h1>
+	<p class="mt-1 max-w-3xl text-slate-600">{t.intro}</p>
 </section>
 
 <div class="grid gap-5 lg:grid-cols-[18rem_1fr]">
@@ -111,12 +120,14 @@
 		method="GET"
 		class="h-fit space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:sticky lg:top-4"
 	>
-		<h2 class="font-semibold">Regional view</h2>
+		<h2 class="font-semibold">{t.regional}</h2>
 		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">Indicator</span>
+			<span class="mb-1 block font-medium text-slate-700">{t.indicator}</span>
 			<select name="indicator" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
 				{#each data.indicators as ind (ind.key)}
-					<option value={ind.key} selected={data.indicator === ind.key}>{ind.label}</option>
+					<option value={ind.key} selected={data.indicator === ind.key}
+						>{t.indicators[ind.key] ?? ind.label}</option
+					>
 				{/each}
 			</select>
 		</label>
@@ -124,7 +135,7 @@
 			<input type="hidden" name="organism" value={data.filter.organism} />
 		{:else}
 			<label class="block text-sm">
-				<span class="mb-1 block font-medium text-slate-700">Organism</span>
+				<span class="mb-1 block font-medium text-slate-700">{t.organism}</span>
 				<select
 					name="organism"
 					class="w-full rounded-md border-slate-300 text-sm"
@@ -138,18 +149,20 @@
 		{/if}
 		{#if data.indicator === 'resistance'}
 			<label class="block text-sm">
-				<span class="mb-1 block font-medium text-slate-700">Antibiotic</span>
+				<span class="mb-1 block font-medium text-slate-700">{t.antibiotic}</span>
 				<select name="ab" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
 					{#each data.antibiotics as a (a.code)}
-						<option value={a.code} selected={data.antibiotic === a.code}>{a.name}</option>
+						<option value={a.code} selected={data.antibiotic === a.code}
+							>{fi ? a.nameFi : a.name}</option
+						>
 					{/each}
 				</select>
 			</label>
 		{/if}
 		<fieldset class="text-sm">
-			<legend class="mb-1 font-medium text-slate-700">Period</legend>
+			<legend class="mb-1 font-medium text-slate-700">{t.period}</legend>
 			<div class="flex gap-2">
-				{#each [['4w', 'Last 4 weeks'], ['12m', 'Last 12 months']] as [value, label] (value)}
+				{#each [['4w', t.last4], ['12m', t.last12]] as [value, label] (value)}
 					<label
 						class={[
 							'flex-1 cursor-pointer rounded-md border px-2 py-1.5 text-center',
@@ -176,37 +189,39 @@
 				class="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-slate-600 [&::-webkit-details-marker]:hidden"
 			>
 				<span
-					><span class="font-medium text-slate-800">More filters</span> · {data.filter.ward ??
-						'all wards'} · {data.filter.specimen ?? 'all specimens'} · {data.asOf}</span
+					><span class="font-medium text-slate-800">{t.more}</span> · {data.filter.ward ??
+						t.allWards} · {data.filter.specimen
+						? specimenName(data.filter.specimen)
+						: t.allSpecimens} · {formatDate(data.locale, data.asOf)}</span
 				><span aria-hidden="true" class="text-xs">▾</span>
 			</summary>
 			<div class="space-y-3 border-t border-slate-200 p-3">
 				<label class="block text-sm">
-					<span class="mb-1 block font-medium text-slate-700">Ward</span>
+					<span class="mb-1 block font-medium text-slate-700">{t.ward}</span>
 					<select name="ward" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
-						<option value="" selected={!data.filter.ward}>All wards</option>
+						<option value="" selected={!data.filter.ward}>{t.allWardsOption}</option>
 						{#each data.wards as w (w.code)}
 							<option value={w.code} selected={data.filter.ward === w.code}
-								>{w.code} · {w.nameEn}</option
+								>{w.code} · {fi ? w.nameFi : w.nameEn}</option
 							>
 						{/each}
 					</select>
 				</label>
 				<label class="block text-sm">
-					<span class="mb-1 block font-medium text-slate-700">Specimen</span>
+					<span class="mb-1 block font-medium text-slate-700">{t.specimen}</span>
 					<select
 						name="specimen"
 						class="w-full rounded-md border-slate-300 text-sm"
 						onchange={submit}
 					>
-						<option value="" selected={!data.filter.specimen}>All specimens</option>
+						<option value="" selected={!data.filter.specimen}>{t.allSpecimensOption}</option>
 						{#each ['urine', 'blood', 'wound'] as s (s)}
-							<option value={s} selected={data.filter.specimen === s}>{s}</option>
+							<option value={s} selected={data.filter.specimen === s}>{specimenName(s)}</option>
 						{/each}
 					</select>
 				</label>
 				<label class="block text-sm">
-					<span class="mb-1 block font-medium text-slate-700">Date</span>
+					<span class="mb-1 block font-medium text-slate-700">{t.date}</span>
 					<input
 						type="date"
 						name="asOf"
@@ -219,32 +234,34 @@
 				</label>
 			</div>
 		</details>
-		<h2 class="pt-2 font-semibold">European view</h2>
+		<h2 class="pt-2 font-semibold">{t.european}</h2>
 		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">EARS-Net indicator</span>
+			<span class="mb-1 block font-medium text-slate-700">{t.earsIndicator}</span>
 			<select name="eu" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
 				{#each eu.indicators as ind (ind.key)}
-					<option value={ind.key} selected={eu.indicator === ind.key}>{ind.label}</option>
+					<option value={ind.key} selected={eu.indicator === ind.key}
+						>{t.ears[ind.key]?.label ?? ind.label}</option
+					>
 				{/each}
 			</select>
 		</label>
-		<noscript><button class="rounded-md bg-teal-700 px-3 py-2 text-white">Update</button></noscript>
+		<noscript
+			><button class="rounded-md bg-teal-700 px-3 py-2 text-white">{t.update}</button></noscript
+		>
 	</form>
 
 	<div class="space-y-5">
 		<section class="rounded-xl border border-slate-200 bg-white p-4">
 			<div class="flex flex-wrap items-baseline justify-between gap-2">
-				<h2 class="font-semibold">Catchment areas · {indicatorLabel}</h2>
+				<h2 class="font-semibold">{t.catchment} · {indicatorLabel}</h2>
 				<span class="text-sm text-slate-500"
-					>{data.window.from} → {data.window.to} · first isolates{data.filter.ward
+					>{formatDate(data.locale, data.window.from)} → {formatDate(data.locale, data.window.to)} · {t.firstIsolates}{data
+						.filter.ward
 						? ` · ${data.filter.ward}`
-						: ''}{data.filter.specimen ? ` · ${data.filter.specimen}` : ''}</span
+						: ''}{data.filter.specimen ? ` · ${specimenName(data.filter.specimen)}` : ''}</span
 				>
 			</div>
-			<p class="mt-1 text-xs text-amber-800">
-				Synthetic areas: the extract only gives five abstract home areas around Tyks (Turku). The
-				layout below is schematic, not real municipal borders.
-			</p>
+			<p class="mt-1 text-xs text-amber-800">{t.synthetic}</p>
 			<a
 				href="{resolve('/')}?{new URLSearchParams({
 					view: 'organism',
@@ -257,15 +274,14 @@
 					asOf: data.asOf,
 					...(data.filter.ward ? { ward: data.filter.ward } : {})
 				}).toString()}"
-				class="mt-1 inline-block text-sm font-medium text-teal-700 hover:underline"
-				>Compare this organism across wards in the resistance view →</a
+				class="mt-1 inline-block text-sm font-medium text-teal-700 hover:underline">{t.compare}</a
 			>
 			<div class="mt-3 grid items-center gap-4 md:grid-cols-[1fr_15rem]">
 				<svg
 					viewBox="0 0 460 430"
 					class="w-full max-w-xl"
 					role="img"
-					aria-label="Regional map of {indicatorLabel}"
+					aria-label={t.regionalAria(indicatorLabel)}
 				>
 					<defs>
 						<pattern
@@ -295,7 +311,7 @@
 							y={s.y - 6}
 							text-anchor="middle"
 							class={['text-[13px] font-semibold', dark(a) ? 'fill-white' : 'fill-slate-800']}
-							>{a.area}</text
+							>{areaName(a.area)}</text
 						>
 						<text
 							x={s.x}
@@ -329,7 +345,7 @@
 							y={CY - 22}
 							text-anchor="middle"
 							class={['text-[13px] font-semibold', dark(centre) ? 'fill-white' : 'fill-slate-800']}
-							>Centre</text
+							>{areaName('Centre')}</text
 						>
 						<text
 							x={CX}
@@ -359,7 +375,7 @@
 				<div class="space-y-3 text-sm">
 					<div>
 						<div class="mb-1 text-xs font-medium text-slate-600">
-							{isPct ? '% (classes adapt to the selection)' : 'First isolates'}
+							{isPct ? t.classesAdapt : t.colFirst}
 						</div>
 						<div class="flex">
 							{#each regionStops as stop (stop.color)}
@@ -374,34 +390,35 @@
 								<svg width="18" height="12" aria-hidden="true"
 									><rect width="18" height="12" fill="url(#too-few)" stroke="#cbd5e1" /></svg
 								>
-								fewer than 30 isolates: not reported
+								{t.tooFewLegend}
 							</div>
 						{/if}
 					</div>
 					<div class="rounded-lg bg-slate-50 p-3">
 						{#if hovered}
-							<div class="font-semibold">{hovered.area}</div>
+							<div class="font-semibold">{areaName(hovered.area)}</div>
 							<div>{areaValue(hovered)}</div>
 							{#if hovered.share && hovered.share.low !== null && hovered.share.high !== null}
 								<div class="text-xs text-slate-500">
-									95 % CI {pct(hovered.share.low * 100)} – {pct(hovered.share.high * 100)} ·
+									{t.ci}
+									{pct(hovered.share.low * 100)} – {pct(hovered.share.high * 100)} ·
 									{hovered.share.k}/{hovered.share.n}
 								</div>
 							{/if}
 							{#if isPct && !hovered.reliable}
-								<div class="text-xs text-amber-700">Fewer than 30 isolates: indicative only.</div>
+								<div class="text-xs text-amber-700">{t.tooFewHover}</div>
 							{/if}
 						{:else if data.all}
-							<div class="text-xs text-slate-500">All areas</div>
+							<div class="text-xs text-slate-500">{t.allAreas}</div>
 							<div class="font-semibold">
 								{data.all.value === null
 									? '–'
 									: isPct
 										? pct(data.all.value)
-										: `${data.all.value} isolates`}
+										: t.isolatesN(data.all.value)}
 							</div>
 							<div class="text-xs text-slate-500">
-								n = {data.all.share?.n ?? data.all.isolates} · hover an area for details
+								n = {data.all.share?.n ?? data.all.isolates} · {t.hoverHint}
 							</div>
 						{/if}
 					</div>
@@ -410,19 +427,19 @@
 			<table class="mt-3 w-full text-left text-sm">
 				<thead class="text-xs text-slate-500">
 					<tr>
-						<th class="py-1 font-medium">Area</th>
-						<th class="py-1 text-right font-medium">First isolates</th>
+						<th class="py-1 font-medium">{t.colArea}</th>
+						<th class="py-1 text-right font-medium">{t.colFirst}</th>
 						{#if isPct}
-							<th class="py-1 text-right font-medium">Tested</th>
-							<th class="py-1 text-right font-medium">Value</th>
-							<th class="py-1 text-right font-medium">95 % CI</th>
+							<th class="py-1 text-right font-medium">{t.colTested}</th>
+							<th class="py-1 text-right font-medium">{t.colValue}</th>
+							<th class="py-1 text-right font-medium">{t.ci}</th>
 						{/if}
 					</tr>
 				</thead>
 				<tbody>
 					{#each data.areas as a (a.area)}
 						<tr class={['border-t border-slate-100', isPct && !a.reliable && 'text-slate-400']}>
-							<td class="py-1">{a.area}</td>
+							<td class="py-1">{areaName(a.area)}</td>
 							<td class="py-1 text-right tabular-nums">{a.isolates}</td>
 							{#if isPct}
 								<td class="py-1 text-right tabular-nums">{a.share?.n ?? 0}</td>
@@ -441,9 +458,9 @@
 
 		<section class="rounded-xl border border-slate-200 bg-white p-4">
 			<div class="flex flex-wrap items-baseline justify-between gap-2">
-				<h2 class="font-semibold">Europe · {meta.label}</h2>
+				<h2 class="font-semibold">{t.europe} · {meta.label}</h2>
 				<span class="text-sm text-slate-500"
-					>EARS-Net {eu.values[0]?.year ?? ''} · invasive isolates</span
+					>EARS-Net {eu.values[0]?.year ?? ''} · {t.invasive}</span
 				>
 			</div>
 			<p class="mt-1 text-xs text-slate-500">{meta.description}.</p>
@@ -453,7 +470,7 @@
 						viewBox="0 0 {eu.width} {eu.height}"
 						class="w-full rounded-lg bg-sky-50"
 						role="img"
-						aria-label="Map of Europe: {meta.label}"
+						aria-label={t.europeAria(meta.label)}
 						onpointerleave={() => (tip = null)}
 					>
 						{#each eu.shapes as c (c.id + c.name)}
@@ -485,17 +502,17 @@
 						>
 							<div class="font-semibold">{tip.name}</div>
 							{#if tipRow}
-								<div>{pct(tipRow.percent)} · n = {tipRow.isolates.toLocaleString('en')}</div>
+								<div>{pct(tipRow.percent)} · n = {num(tipRow.isolates)}</div>
 								<div class="text-slate-500">EARS-Net {tipRow.year}</div>
 							{:else}
-								<div class="text-slate-500">Not in EARS-Net / no data</div>
+								<div class="text-slate-500">{t.noData}</div>
 							{/if}
 						</div>
 					{/if}
 				</div>
 				<div class="space-y-3 text-sm">
 					<div>
-						<div class="mb-1 text-xs font-medium text-slate-600">% resistant</div>
+						<div class="mb-1 text-xs font-medium text-slate-600">{t.pctResistant}</div>
 						<div class="flex">
 							{#each euStops as stop (stop.color)}
 								<div class="flex-1">
@@ -505,56 +522,58 @@
 							{/each}
 						</div>
 						<div class="mt-1 flex items-center gap-2 text-xs text-slate-500">
-							<span class="inline-block h-3 w-4 bg-slate-200"></span> outside EARS-Net / no data
+							<span class="inline-block h-3 w-4 bg-slate-200"></span>
+							{t.outside}
 						</div>
 					</div>
 					<div class="rounded-lg border border-teal-200 bg-teal-50 p-3">
 						<div class="text-xs font-medium tracking-wide text-teal-900 uppercase">
-							Tyks extract vs Finland
+							{t.vsFinland}
 						</div>
 						<div class="mt-2 flex items-baseline justify-between">
-							<span>This dataset</span>
+							<span>{t.thisDataset}</span>
 							<span class="text-lg font-semibold tabular-nums"
 								>{pct(eu.dataset.p === null ? null : eu.dataset.p * 100)}</span
 							>
 						</div>
 						<div class="text-xs text-slate-600">
-							{eu.dataset.k}/{eu.dataset.n} first blood isolates, {eu.datasetWindow.from} → {eu
-								.datasetWindow.to}{eu.dataset.low !== null && eu.dataset.high !== null
-								? ` · 95 % CI ${(eu.dataset.low * 100).toFixed(1)}–${(eu.dataset.high * 100).toFixed(1)} %`
+							{t.datasetLine(
+								eu.dataset.k,
+								eu.dataset.n,
+								formatDate(data.locale, eu.datasetWindow.from),
+								formatDate(data.locale, eu.datasetWindow.to)
+							)}{eu.dataset.low !== null && eu.dataset.high !== null
+								? ` · ${t.ci} ${pct(eu.dataset.low * 100)}–${pct(eu.dataset.high * 100)}`
 								: ''}
 						</div>
 						{#if finland}
 							<div class="mt-2 flex items-baseline justify-between">
-								<span>Finland (national)</span>
+								<span>{t.finland}</span>
 								<span class="text-lg font-semibold tabular-nums">{pct(finland.percent)}</span>
 							</div>
 							<div class="text-xs text-slate-600">
-								EARS-Net {finland.year}, n = {finland.isolates.toLocaleString('en')}
+								EARS-Net {finland.year}, n = {num(finland.isolates)}
 							</div>
 							<div class="mt-2 flex items-baseline justify-between text-slate-600">
-								<span>EU/EEA mean</span>
+								<span>{t.euMean}</span>
 								<span class="tabular-nums">{pct(finland.euMean)}</span>
 							</div>
 						{/if}
 						<p class="mt-2 text-xs text-slate-500">
-							{eu.indicator === 'saureus_mrsa'
-								? 'Dataset: MRSA flag among S. aureus from blood cultures.'
-								: 'Dataset: ceftriaxone-resistant E. coli from blood cultures (EARS-Net counts any of cefotaxime, ceftriaxone or ceftazidime).'}
-							The extract is synthetic: the comparison shows the method, not Tyks' real level.
+							{eu.indicator === 'saureus_mrsa' ? t.datasetMrsa : t.datasetEcoli}
+							{t.syntheticNote}
 						</p>
 					</div>
 				</div>
 			</div>
 			<p class="mt-3 text-xs text-slate-500">
-				Source: {eu.values[0]?.source ?? 'data/ears-net.csv'}, via
+				{t.source}: {eu.values[0]?.source ?? 'data/ears-net.csv'}, {t.via}
 				<a
 					href="https://www.ecdc.europa.eu/en/about-us/networks/disease-networks-and-laboratory-networks/ears-net-data"
 					class="text-teal-700 underline"
 					rel="external noopener"
 					target="_blank">ECDC EARS-Net</a
-				>. Values are shipped in <code>data/ears-net.csv</code>. Liechtenstein reported too few
-				isolates.
+				>. {t.shipped} <code>data/ears-net.csv</code>. {t.liechtenstein}
 			</p>
 		</section>
 	</div>

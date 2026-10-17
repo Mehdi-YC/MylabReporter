@@ -105,3 +105,23 @@ describe('monthly counts', () => {
 		]);
 	});
 });
+
+describe('bulletin week', () => {
+	test('a Monday bulletin covers the ISO week that just ended', async () => {
+		const { lastCompleteWeek } = await import('../src/lib/amr/dates');
+		expect(lastCompleteWeek('2025-06-30')).toEqual({
+			from: '2025-06-23',
+			to: '2025-06-29',
+			year: 2025,
+			week: 26
+		});
+		// On a Sunday, the week ending that day; mid-week, the previous one.
+		expect(lastCompleteWeek('2025-06-29')).toMatchObject({ from: '2025-06-23', week: 26 });
+		expect(lastCompleteWeek('2025-07-02')).toMatchObject({ from: '2025-06-23', week: 26 });
+		expect(lastCompleteWeek('2026-01-04')).toMatchObject({
+			from: '2025-12-29',
+			year: 2026,
+			week: 1
+		});
+	});
+});

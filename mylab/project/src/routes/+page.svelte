@@ -98,7 +98,7 @@
 	const LEVEL = {
 		critical: 'border-rose-300 bg-rose-50 text-rose-700',
 		warning: 'border-amber-300 bg-amber-50 text-amber-800',
-		sentinel: 'border-rose-300 bg-white text-rose-700'
+		sentinel: 'border-rose-300 bg-rose-50 text-rose-700'
 	};
 </script>
 
@@ -316,6 +316,9 @@
 						<span class="block text-sm text-slate-500">{t.pulse.empiricSites[e.key]}</span>
 						<span class="block text-[17px] font-semibold">{e.code ? abName(e.code) : '–'}</span>
 						{#if !e.adequate}<span class="block text-xs text-amber-800">{t.pulse.noAdequate}</span
+							>{/if}
+						{#if e.reserve}<span class="mt-0.5 block text-xs text-rose-700"
+								>{t.pulse.reserveSevere(abName(e.reserve.code), pct(e.reserve.coverage))}</span
 							>{/if}
 					</span>
 					<span
