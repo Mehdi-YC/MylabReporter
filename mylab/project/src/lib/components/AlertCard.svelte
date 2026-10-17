@@ -1,52 +1,26 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { Alert } from '#lib/amr/anomalies.ts';
+	import { alertFigures, alertReasons, alertTitle } from '#lib/alertText.ts';
+	import { formatDate, messages, type Locale } from '#lib/i18n.ts';
 
 	interface Props {
 		alert: Alert;
+		rank: number;
+		locale: Locale;
 		wardName: string;
 		antibioticName?: string;
 		asOf: string;
+		/** Grouped under another alert with the same patients. */
+		linked?: boolean;
 	}
 
-	let { alert, wardName, antibioticName, asOf }: Props = $props();
+	let { alert, rank, locale, wardName, antibioticName, asOf, linked = false }: Props = $props();
 
-	const PHENOTYPE_LABEL = { esbl: 'ESBL', mrsa: 'MRSA', vre: 'VRE', cpe: 'CPE' };
-	const KIND_LABEL = {
-		sentinel: 'Sentinel organism',
-		'phenotype-cluster': 'Resistant-phenotype cluster',
-		'resistance-rise': 'Resistance rise',
-		'organism-surge': 'Organism surge'
-	};
-	const ACTIONS = {
-		sentinel: 'Contact precautions, notify infection control, screen contacts per local guideline.',
-		'phenotype-cluster':
-			'Notify infection control; review hand hygiene and contact precautions; consider screening.',
-		'resistance-rise':
-			'Review empirical therapy for this ward until the signal settles; check for a common source.',
-		'organism-surge': 'Check for a common source (device, procedure, staff) with infection control.'
-	};
-
-	const pct = (p: number) => `${Math.round(p * 100)} %`;
-	const title = $derived.by(() => {
-		const ward = `${alert.ward}`;
-		switch (alert.kind) {
-			case 'sentinel':
-				return `${PHENOTYPE_LABEL[alert.phenotype!]} detected in ${ward}`;
-			case 'phenotype-cluster':
-				return `${PHENOTYPE_LABEL[alert.phenotype!]} cluster in ${ward}: ${alert.observed} cases in 4 weeks`;
-			case 'resistance-rise':
-				return `${alert.organism} resistant to ${antibioticName ?? alert.antibiotic} in ${ward}: ${pct(alert.observed)}`;
-			case 'organism-surge':
-				return `Surge of ${alert.organism} in ${ward}: ${alert.observed} isolates in 4 weeks`;
-		}
-	});
-
-	const detail = $derived(
-		alert.kind === 'resistance-rise'
-			? `Baseline ${pct(alert.expected)} over the previous 12 months · ${alert.cases.length}/${alert.n} resistant`
-			: `Expected ${alert.expected.toFixed(1)} from the previous 12 months`
-	);
+	const t = $derived(messages[locale]);
+	const title = $derived(alertTitle(locale, alert, wardName, antibioticName));
+	const reasons = $derived(alertReasons(locale, alert));
+	const figures = $derived(alertFigures(locale, alert));
 
 	const specimen = $derived.by(() => {
 		const counts: Record<string, number> = {};
@@ -67,81 +41,118 @@
 
 	const inv = $derived(alert.investigation);
 	const n = $derived(alert.cases.length);
+	const critical = $derived(alert.severity === 'critical');
 </script>
 
 <article
 	class={[
-		'rounded-xl border bg-white p-4',
-		alert.severity === 'critical' ? 'border-rose-300' : 'border-amber-300'
+		'rounded-xl border bg-white p-5',
+		critical ? 'border-rose-300' : 'border-amber-300',
+		linked && 'ml-6 border-dashed'
 	]}
 >
-	<div class="flex flex-wrap items-start justify-between gap-2">
-		<div>
-			<div class="mb-1 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
+	<div class="flex flex-wrap items-start justify-between gap-3">
+		<div class="min-w-0">
+			<div class="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
+				<span class="font-mono text-slate-500">#{rank}</span>
 				<span
 					class={[
-						'rounded px-1.5 py-0.5',
-						alert.severity === 'critical' ? 'bg-rose-600 text-white' : 'bg-amber-400 text-amber-950'
-					]}>{alert.severity}</span
+						'rounded px-2 py-0.5 font-semibold',
+						critical ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-800'
+					]}>{critical ? t.critical : t.warning}</span
 				>
-				<span class="text-slate-500">{KIND_LABEL[alert.kind]} · {wardName}</span>
+				<span class="text-slate-500">{t.alert.kinds[alert.kind]} · {wardName}</span>
 			</div>
-			<h3 class="font-semibold">{title}</h3>
-			<p class="text-sm text-slate-600">
-				{detail} · p = {alert.pValue < 0.0001
-					? alert.pValue.toExponential(1)
-					: alert.pValue.toFixed(4)}
-			</p>
+			<h3 class="text-[17px] font-semibold">{title}</h3>
+			{#if linked}<p class="mt-1 text-xs text-teal-700">↳ {t.alert.linked}</p>{/if}
 		</div>
 		<a
 			href="{resolve('/antibiogram')}?{antibiogramQuery}#trend"
 			class="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-teal-800 hover:bg-teal-50"
-			>Open antibiogram →</a
+			>{t.alert.openAntibiogram}</a
 		>
 	</div>
 
+	<div class="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+		<dl class="grid grid-cols-2 border-y border-slate-200 text-sm">
+			<div class="border-r border-slate-200 px-3 py-2.5">
+				<dt class="text-xs text-slate-500">{t.alert.observed}</dt>
+				<dd class="text-xl font-semibold tabular-nums">{figures.observed}</dd>
+			</div>
+			<div class="px-3 py-2.5">
+				<dt class="text-xs text-slate-500">
+					{alert.kind === 'resistance-rise' ? t.alert.baseline : t.alert.expected}
+				</dt>
+				<dd class="text-xl font-semibold tabular-nums">{figures.expected}</dd>
+			</div>
+		</dl>
+		<div>
+			<h4 class="mb-1.5 text-sm font-semibold">{t.alert.why}</h4>
+			<ol class="flex flex-col gap-1.5 text-sm">
+				{#each reasons as reason, i (i)}
+					<li class="grid grid-cols-[22px_minmax(0,1fr)] gap-2">
+						<span
+							class="flex size-5 items-center justify-center rounded-full bg-teal-50 font-mono text-[11px] font-semibold text-teal-700"
+							>{i + 1}</span
+						>
+						<span class={i === 0 ? '' : 'text-slate-600'}>{reason}</span>
+					</li>
+				{/each}
+			</ol>
+		</div>
+	</div>
+
 	{#if n > 1 || alert.kind !== 'sentinel'}
-		<ul class="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+		<ul class="mt-4 grid gap-2 text-sm sm:grid-cols-3">
 			<li class="rounded-lg bg-slate-50 px-3 py-2">
-				<div class="text-xs text-slate-500">Hospital-onset (day ≥ 3)</div>
+				<div class="text-xs text-slate-500">{t.alert.hospitalOnset}</div>
 				<div class="font-semibold tabular-nums">{inv.hospitalOnset} / {n}</div>
 			</li>
 			<li class="rounded-lg bg-slate-50 px-3 py-2">
-				<div class="text-xs text-slate-500">Identical antibiogram profile</div>
+				<div class="text-xs text-slate-500">{t.alert.sameProfile}</div>
 				<div class="font-semibold tabular-nums">
 					{inv.sameProfile} / {n}
 					{#if n >= 3 && inv.sameProfile / n >= 0.5}
-						<span class="ml-1 text-xs font-normal text-rose-700">possible common strain</span>
+						<span class="ml-1 text-xs font-normal text-rose-700">{t.alert.commonStrain}</span>
 					{/if}
 				</div>
 			</li>
 			<li class="rounded-lg bg-slate-50 px-3 py-2">
-				<div class="text-xs text-slate-500">Cases between</div>
-				<div class="font-semibold tabular-nums">{inv.firstSeen} → {inv.lastSeen}</div>
+				<div class="text-xs text-slate-500">{t.alert.between}</div>
+				<div class="font-semibold tabular-nums">
+					{formatDate(locale, inv.firstSeen)} – {formatDate(locale, inv.lastSeen)}
+				</div>
 			</li>
 		</ul>
 	{/if}
 
-	<p class="mt-3 text-sm"><span class="font-medium">Suggested:</span> {ACTIONS[alert.kind]}</p>
+	{#if !linked}
+		<p class="mt-3 text-sm">
+			<span class="font-medium">{t.alert.suggested}</span>
+			{t.alert.actions[alert.kind]}
+		</p>
+	{/if}
 
 	<details class="mt-2 text-sm">
-		<summary class="cursor-pointer text-slate-500">{n} case{n > 1 ? 's' : ''}</summary>
+		<summary class="cursor-pointer text-slate-500">{t.alert.cases(n)}</summary>
 		<table class="mt-2 w-full text-left text-xs">
 			<thead class="text-slate-500">
 				<tr
-					><th class="py-1 font-medium">Date</th><th class="font-medium">Patient</th><th
-						class="font-medium">Organism</th
-					><th class="font-medium">Specimen</th><th class="font-medium">Onset</th></tr
+					><th class="py-1 font-medium">{t.alert.colDate}</th><th class="font-medium"
+						>{t.alert.colPatient}</th
+					><th class="font-medium">{t.alert.colOrganism}</th><th class="font-medium"
+						>{t.alert.colSpecimen}</th
+					><th class="font-medium">{t.alert.colOnset}</th></tr
 				>
 			</thead>
 			<tbody class="divide-y divide-slate-100">
 				{#each alert.cases as c (c.isolateId)}
 					<tr>
-						<td class="py-1 tabular-nums">{c.date}</td>
+						<td class="py-1 tabular-nums">{formatDate(locale, c.date)}</td>
 						<td class="tabular-nums">{c.patientId}</td>
 						<td class="italic">{c.organism}</td>
-						<td>{c.specimen}</td>
-						<td>{c.hospitalOnset ? 'hospital' : 'community / early'}</td>
+						<td>{t.specimens[c.specimen]}</td>
+						<td>{c.hospitalOnset ? t.alert.onsetHospital : t.alert.onsetCommunity}</td>
 					</tr>
 				{/each}
 			</tbody>

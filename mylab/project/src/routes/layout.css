@@ -1,3 +1,60 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+/*
+ * AEI visual system: light clinical ground, deep medical teal, slate navy; red and amber only
+ * for anomalies. Existing Tailwind colour names are remapped so every page follows it.
+ */
+@theme {
+	--font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+	--color-teal-50: #e2f0ee;
+	--color-teal-100: #cde6e2;
+	--color-teal-200: #a9d3cd;
+	--color-teal-600: #0d7a7a;
+	--color-teal-700: #0a6464;
+	--color-teal-800: #084f50;
+	--color-teal-900: #063d3e;
+
+	--color-slate-50: #f4f6f6;
+	--color-slate-100: #eef2f2;
+	--color-slate-200: #dce3e5;
+	--color-slate-300: #c9d3d6;
+	--color-slate-400: #8a979e;
+	--color-slate-500: #5e6e78;
+	--color-slate-600: #3e4f5a;
+	--color-slate-700: #2e3e49;
+	--color-slate-800: #1d2e39;
+	--color-slate-900: #13222d;
+
+	--color-rose-50: #f7e4e2;
+	--color-rose-100: #f1d3cf;
+	--color-rose-300: #e3a6a0;
+	--color-rose-400: #c96a62;
+	--color-rose-600: #a33232;
+	--color-rose-700: #a33232;
+	--color-rose-900: #6e2222;
+
+	--color-amber-50: #fbf0d9;
+	--color-amber-100: #f7e5bf;
+	--color-amber-300: #e9c77b;
+	--color-amber-400: #d9a440;
+	--color-amber-800: #8a5a00;
+	--color-amber-900: #6e4800;
+	--color-amber-950: #3d2800;
+
+	--color-emerald-50: #e3f0e7;
+	--color-emerald-100: #cfe5d6;
+	--color-emerald-200: #a9cdb5;
+	--color-emerald-500: #3e8a5c;
+	--color-emerald-700: #2e6b45;
+	--color-emerald-900: #1f4a30;
+
+	--color-navy: #13222d;
+}
+
+body {
+	background: var(--color-slate-50);
+}

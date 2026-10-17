@@ -1,7 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { getDataset } from '#lib/server/amr/dataset.ts';
-import { getAlertTimeline } from '#lib/server/amr/alerts.ts';
-import { detectAnomalies, wardLevels } from '#lib/amr/anomalies.ts';
+import { getAlerts, getAlertTimeline } from '#lib/server/amr/alerts.ts';
+import { wardLevels } from '#lib/amr/anomalies.ts';
+import { rankAlerts } from '#lib/amr/triage.ts';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const data = await getDataset();
@@ -13,14 +14,18 @@ export const load: PageServerLoad = async ({ url }) => {
 			? requested
 			: data.lastDate;
 
-	const alerts = detectAnomalies(data.isolates, asOf);
+	const alerts = getAlerts(data, asOf);
+	const ranked = rankAlerts(alerts);
 
 	return {
 		asOf,
 		lastDate: data.lastDate,
 		wards: data.wards,
-		antibiotics: data.antibiotics.map((a) => ({ code: a.code, name: a.name })),
-		alerts,
+		antibiotics: data.antibiotics.map((a) => ({ code: a.code, name: a.name, nameFi: a.nameFi })),
+		alerts: ranked.map((r) => r.alert),
+		linked: Object.fromEntries(
+			ranked.filter((r) => r.linkedTo).map((r) => [r.alert.id, r.linkedTo!])
+		),
 		wardStatus: wardLevels(alerts),
 		timeline
 	};
