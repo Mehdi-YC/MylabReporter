@@ -29,6 +29,23 @@ bun run dev
 - The server keeps the dataset in memory and polls the database every 30 s; new results written by
   the laboratory feed appear without a restart – `src/lib/server/amr/dataset.ts`.
 
+## Ask the data (`/ask`, local LLM)
+
+Questions in English, French or Finnish go through `src/lib/server/ai/`:
+
+1. **Intent**: the model picks one of three tools (`resistance`, `therapy`, `alerts`) when it supports
+   tool calling, otherwise it returns a JSON intent; a keyword parser (EN/FR/FI) fills the gaps and is
+   the fallback when no model answers. Every field is validated against the dataset's own codes, and
+   narrowing filters the question does not mention are dropped.
+2. **Numbers**: computed by the same functions as the other pages (`antibiogram.ts`, `anomalies.ts`,
+   `advisor.ts`) – never by the model.
+3. **Wording**: the model only rephrases the computed summary in the question's language; figures in
+   its text that are not in the data are flagged. Only aggregates are sent, never patient rows.
+
+Backends (`AI_PROVIDER`): `ollama` (default, `OLLAMA_URL`, `OLLAMA_MODEL=mistral:latest`), `openai`
+(any OpenAI-compatible endpoint) or `anthropic` (Claude through the Anthropic SDK, needs
+`ANTHROPIC_API_KEY`). When the model is down the computed answer is still shown.
+
 ---
 
 ## About the template (sv)

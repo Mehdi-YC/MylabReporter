@@ -3,6 +3,7 @@ import { getDataset } from '#lib/server/amr/dataset.ts';
 import { selectIsolates, type IsolateFilter } from '#lib/amr/antibiogram.ts';
 import { detectAnomalies } from '#lib/amr/anomalies.ts';
 import {
+	AGE_GROUPS,
 	alertWarnings,
 	bestAvailable,
 	bestCombination,
@@ -10,27 +11,14 @@ import {
 	DRUG_NOTES,
 	narrowestAdequate,
 	organismMix,
-	rankOptions
+	rankOptions,
+	SITES,
+	type AgeGroup,
+	type Site
 } from '#lib/amr/advisor.ts';
 import { surveillanceWindows } from '#lib/amr/dates.ts';
 import { MIN_ISOLATES } from '#lib/amr/stats.ts';
-import type { Sex, Specimen } from '#lib/amr/types.ts';
-
-/** Clinical syndrome → culture specimen used as evidence. */
-const SITES = {
-	cystitis: { label: 'Cystitis (lower UTI)', specimen: 'urine' },
-	'febrile-uti': { label: 'Febrile UTI / pyelonephritis', specimen: 'urine' },
-	blood: { label: 'Bloodstream infection', specimen: 'blood' },
-	wound: { label: 'Skin / wound infection', specimen: 'wound' }
-} as const satisfies Record<string, { label: string; specimen: Specimen }>;
-type Site = keyof typeof SITES;
-
-const AGE_GROUPS = {
-	child: { label: '< 18', min: 0, max: 17 },
-	adult: { label: '18–64', min: 18, max: 64 },
-	elderly: { label: '≥ 65', min: 65, max: 200 }
-} as const;
-type AgeGroup = keyof typeof AGE_GROUPS;
+import type { Sex } from '#lib/amr/types.ts';
 
 const TARGETS = [0.7, 0.8, 0.9];
 
