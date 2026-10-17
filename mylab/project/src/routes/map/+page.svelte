@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -227,6 +228,21 @@
 				Synthetic areas: the extract only gives five abstract home areas around Tyks (Turku). The
 				layout below is schematic, not real municipal borders.
 			</p>
+			<a
+				href="{resolve('/')}?{new URLSearchParams({
+					view: 'organism',
+					organism:
+						data.indicator === 'mrsa'
+							? 'Staphylococcus aureus'
+							: (data.filter.organism ?? 'Escherichia coli'),
+					specimen: data.filter.specimen ?? 'urine',
+					window: data.period === '4w' ? '4w' : '12m',
+					asOf: data.asOf,
+					...(data.filter.ward ? { ward: data.filter.ward } : {})
+				}).toString()}"
+				class="mt-1 inline-block text-sm font-medium text-teal-700 hover:underline"
+				>Compare this organism across wards in the resistance view →</a
+			>
 			<div class="mt-3 grid items-center gap-4 md:grid-cols-[1fr_15rem]">
 				<svg
 					viewBox="0 0 460 430"

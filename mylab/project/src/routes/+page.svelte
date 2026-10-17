@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { alertReasons, alertTitle, formatP } from '#lib/alertText.ts';
-	import { formatDate, formatPercent, formatRange, messages } from '#lib/i18n.ts';
+	import { alertReasons, alertTitle } from '#lib/alertText.ts';
+	import { askAei } from '#lib/askBus.ts';
+	import { formatPercent, formatRange, messages } from '#lib/i18n.ts';
+	import type { Proportion } from '#lib/amr/stats.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -9,6 +11,7 @@
 	const t = $derived(messages[data.locale]);
 	const fi = $derived(data.locale === 'fi');
 	const pct = (x: number | null) => formatPercent(data.locale, x);
+	const pctP = (p: number | null) => formatPercent(data.locale, p === null ? null : p * 100);
 	const wardName = (code: string) => {
 		const w = data.wards.find((x) => x.code === code);
 		return w ? (fi ? w.nameFi : w.nameEn) : code;
@@ -21,28 +24,48 @@
 	const submit = (e: Event) =>
 		(e.currentTarget as HTMLSelectElement | HTMLInputElement).form?.requestSubmit();
 
-	const query = (params: Record<string, string>) =>
-		new URLSearchParams({
+	/** Current selection plus overrides, as a query string for links. */
+	function q(over: Record<string, string | null> = {}): string {
+		const base: Record<string, string | null> = {
 			ward: data.input.ward,
 			specimen: data.input.specimen,
-			...params
-		}).toString();
+			window: data.input.window,
+			view: data.input.view,
+			organism: data.input.view === 'organism' ? data.input.organism : null,
+			asOf: data.asOf,
+			cellOrg: data.cell?.organism ?? null,
+			cellAb: data.cell?.code ?? null,
+			...over
+		};
+		return new URLSearchParams(
+			Object.entries(base).filter((e): e is [string, string] => !!e[1])
+		).toString();
+	}
 
-	// Trend chart geometry (viewBox 400 × 150).
-	const trendMax = $derived(
-		Math.max(20, ...(data.trend?.points.map((p) => p.r ?? 0) ?? []), data.trend?.baseline ?? 0)
+	const tint = (s: Proportion) => {
+		if (!s.reliable || s.p === null) return 'bg-slate-100 text-slate-400';
+		if (s.p >= 0.25) return 'bg-rose-50 text-rose-700';
+		if (s.p >= 0.1) return 'bg-amber-50 text-slate-900';
+		return 'bg-white text-slate-900';
+	};
+
+	// 24-month chart (viewBox 600 × 170): this ward and all wards.
+	const chartMax = $derived(
+		Math.max(
+			20,
+			...(data.cell?.ward.map((p) => p.r ?? 0) ?? []),
+			...(data.cell?.hospital.map((p) => p.r ?? 0) ?? [])
+		)
 	);
-	const tx = (i: number) => (i * 400) / 11;
-	const ty = (v: number) => 130 - (v / trendMax) * 112;
-	const trendPoints = $derived(
-		data.trend
-			? data.trend.points
-					.map((p, i) => (p.r === null ? null : `${tx(i).toFixed(1)},${ty(p.r).toFixed(1)}`))
-					.filter(Boolean)
-					.join(' ')
-			: ''
-	);
-	const lastPoint = $derived(data.trend?.points.at(-1) ?? null);
+	const cx = (i: number, n: number) => (i * 600) / Math.max(1, n - 1);
+	const cy = (v: number) => 150 - (v / chartMax) * 130;
+	const line = (points: { r: number | null }[]) =>
+		points
+			.map((p, i) =>
+				p.r === null ? null : `${cx(i, points.length).toFixed(1)},${cy(p.r).toFixed(1)}`
+			)
+			.filter(Boolean)
+			.join(' ');
 	const monthLabel = (m: string) =>
 		fi
 			? `${Number(m.slice(5))}/${m.slice(0, 4)}`
@@ -51,7 +74,6 @@
 					year: 'numeric',
 					timeZone: 'UTC'
 				});
-	const weeklyMax = $derived(Math.max(1, ...(data.weekly?.points.map((p) => p.value) ?? [])));
 
 	const LEVEL = {
 		critical: 'border-rose-300 bg-rose-50 text-rose-700',
@@ -62,8 +84,14 @@
 
 <form
 	method="GET"
-	class="-mx-4 -mt-6 mb-6 border-b border-slate-200 bg-white px-4 py-3 sm:-mx-8 sm:px-8"
+	class="sticky top-0 z-30 -mx-4 -mt-6 mb-6 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8"
 >
+	<input type="hidden" name="view" value={data.input.view} />
+	{#if data.input.view === 'organism'}<input
+			type="hidden"
+			name="organism"
+			value={data.input.organism}
+		/>{/if}
 	<div class="flex flex-wrap items-end gap-4">
 		<label class="flex flex-col gap-1 text-xs font-medium text-slate-500">
 			{t.ward}
@@ -157,145 +185,194 @@
 		</p>
 	</div>
 
-	{#if data.primary}
-		{@const p = data.primary}
+	<!-- The three questions a clinician asks, in plain sentences. -->
+	<div class="grid gap-4 lg:grid-cols-3">
 		<section
-			aria-labelledby="primary-anomaly"
+			aria-labelledby="status"
 			class={[
-				'grid gap-5 rounded-xl border bg-white p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center',
-				p.severity === 'critical' ? 'border-rose-300' : 'border-amber-300'
+				'flex flex-col gap-2.5 rounded-xl border bg-white p-5',
+				data.primary
+					? data.primary.severity === 'critical'
+						? 'border-rose-300'
+						: 'border-amber-300'
+					: 'border-emerald-200'
 			]}
 		>
-			<div class="flex flex-col gap-2.5">
-				<div class="flex flex-wrap items-center gap-2.5 text-xs">
-					<span
-						class={[
-							'rounded px-2 py-0.5 font-semibold',
-							p.severity === 'critical' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-800'
-						]}>{p.severity === 'critical' ? t.critical : t.warning}</span
-					>
-					<span class="text-slate-500"
-						>{t.alert.kinds[p.kind]} · {formatP(data.locale, p.pValue)}</span
-					>
-				</div>
-				<h2 id="primary-anomaly" class="text-xl font-semibold">
+			<h2 id="status" class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+				{t.pulse.statusTitle}
+			</h2>
+			{#if data.primary}
+				{@const p = data.primary}
+				<span
+					class={[
+						'w-fit rounded px-2 py-0.5 text-xs font-semibold',
+						p.severity === 'critical' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-800'
+					]}>{p.severity === 'critical' ? t.critical : t.warning}</span
+				>
+				<p class="text-[17px] leading-snug font-semibold">
 					{alertTitle(
 						data.locale,
 						{ ...p, ward: data.input.ward },
 						wardName(data.input.ward),
 						p.antibiotic ? abName(p.antibiotic) : undefined
 					)}
-				</h2>
-				{#each alertReasons(data.locale, { ...p, ward: data.input.ward }) as reason, i (i)}
-					<p class={i === 0 ? 'text-[15px]' : 'text-sm text-slate-600'}>{reason}</p>
-				{/each}
-				{#if p.cases > 1}
-					<ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">
-						<li>
-							{t.alert.hospitalOnset}:
-							<span class="font-semibold text-slate-900"
-								>{p.investigation.hospitalOnset}/{p.cases}</span
-							>
-						</li>
-						<li>
-							{t.alert.sameProfile}:
-							<span class="font-semibold text-slate-900"
-								>{p.investigation.sameProfile}/{p.cases}</span
-							>
-						</li>
-						<li>
-							{t.alert.between}:
-							<span class="font-mono text-xs text-slate-900"
-								>{formatDate(data.locale, p.investigation.firstSeen)} – {formatDate(
-									data.locale,
-									p.investigation.lastSeen
-								)}</span
-							>
-						</li>
-					</ul>
-				{/if}
-				{#if data.wardAlerts.total > 1}
-					<p class="text-sm text-slate-500">{t.pulse.moreAlerts(data.wardAlerts.total - 1)}</p>
-				{/if}
-			</div>
-			<a
-				href="{resolve('/alerts')}?asOf={data.asOf}"
-				class="min-h-11 rounded-md bg-teal-700 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-teal-800"
-				>{t.pulse.openAnomaly}</a
-			>
-		</section>
-	{:else}
-		<section class="flex items-center gap-4 rounded-xl border border-emerald-200 bg-white p-5">
-			<svg width="40" height="40" viewBox="0 0 56 56" aria-hidden="true"
-				><circle cx="28" cy="28" r="26" fill="#E3F0E7" /><path
-					d="M18 28.5 L25 35 L38.5 21"
-					fill="none"
-					stroke="#2E6B45"
-					stroke-width="3"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/></svg
-			>
-			<div>
-				<h2 class="font-semibold">{t.noDeviations}</h2>
-				<p class="text-sm text-slate-600">{t.pulse.calm}</p>
-			</div>
-		</section>
-	{/if}
-
-	<section aria-label="KPI" class="grid grid-cols-2 border-y border-slate-200 lg:grid-cols-4">
-		<div class="flex flex-col gap-1 border-slate-200 px-5 py-4">
-			<span class="text-sm text-slate-500">{t.pulse.kpiIsolates}</span>
-			<span class="text-[28px] font-semibold tabular-nums">{data.kpi.recentIsolates}</span>
-			<span class="text-sm text-slate-600">{t.pulse.kpiIsolatesSub(data.kpi.annualIsolates)}</span>
-		</div>
-		<div class="flex flex-col gap-1 border-l border-slate-200 px-5 py-4">
-			<span class="text-sm text-slate-500">{t.pulse.kpiTop}</span>
-			{#if data.table.topRise}
-				<span class="text-[28px] font-semibold text-rose-700 tabular-nums"
-					>{pct(data.table.topRise.recent)}</span
-				>
-				<span class="text-sm text-slate-600"
-					><span class="italic">{data.table.topRise.organism}</span> ·
-					<span class="font-mono text-xs">{data.table.topRise.code}</span>
-					· {t.w12Short}
-					{pct(data.table.topRise.annual)}</span
+				</p>
+				<p class="text-sm text-slate-600">
+					{alertReasons(data.locale, { ...p, ward: data.input.ward })[0]}
+				</p>
+				{#if data.wardAlerts.total > 1}<p class="text-sm text-slate-500">
+						{t.pulse.moreAlerts(data.wardAlerts.total - 1)}
+					</p>{/if}
+				<div class="flex-1"></div>
+				<a
+					href="{resolve('/alerts')}?asOf={data.asOf}"
+					class="text-sm font-semibold text-teal-700 hover:underline">{t.pulse.openAnomaly} →</a
 				>
 			{:else}
-				<span class="text-[28px] font-semibold">–</span>
-				<span class="text-sm text-slate-600">{t.pulse.kpiTopNone}</span>
+				<p class="flex items-center gap-2 text-[17px] font-semibold text-emerald-700">
+					<svg width="22" height="22" viewBox="0 0 56 56" aria-hidden="true"
+						><circle cx="28" cy="28" r="26" fill="#E3F0E7" /><path
+							d="M18 28.5 L25 35 L38.5 21"
+							fill="none"
+							stroke="#2E6B45"
+							stroke-width="4"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/></svg
+					>
+					{t.noDeviations}
+				</p>
+				<p class="text-sm text-slate-600">{t.pulse.calm}</p>
 			{/if}
-		</div>
-		<div class="flex flex-col gap-1 border-slate-200 px-5 py-4 lg:border-l">
-			<span class="text-sm text-slate-500">{t.pulse.kpiAlerts}</span>
-			<span
-				class={[
-					'text-[28px] font-semibold tabular-nums',
-					data.wardAlerts.critical && 'text-rose-700'
-				]}>{data.wardAlerts.total}</span
-			>
-			<span class="text-sm text-slate-600"
-				>{t.pulse.kpiAlertsSub(
-					data.wardAlerts.critical,
-					data.wardAlerts.total - data.wardAlerts.critical
-				)}</span
-			>
-		</div>
-		<div class="flex flex-col gap-1 border-l border-slate-200 px-5 py-4">
-			<span class="text-sm text-slate-500">{t.pulse.kpiOnset}</span>
-			<span class="text-[28px] font-semibold tabular-nums"
-				>{data.kpi.wardType === 'in' ? data.kpi.hospitalOnset : '–'}</span
-			>
-			<span class="text-sm text-slate-600">{t.pulse.kpiOnsetSub}</span>
-		</div>
-	</section>
+		</section>
 
-	<div class="flex flex-wrap items-start gap-7">
-		<section aria-labelledby="sr-table" class="min-w-0 flex-[999_1_640px]">
-			<div class="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
-				<h2 id="sr-table" class="text-[17px] font-semibold">{t.pulse.tableTitle}</h2>
-				<span class="text-xs text-slate-500">{t.pulse.tableHint}</span>
+		<section
+			aria-labelledby="give"
+			class="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-5"
+		>
+			<h2 id="give" class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+				{t.pulse.giveTitle}
+			</h2>
+			{#each data.empiric as e (e.site)}
+				<a
+					href="{resolve('/advisor')}?{new URLSearchParams({
+						ward: data.input.ward,
+						site: e.site,
+						asOf: data.asOf
+					}).toString()}"
+					class="flex items-baseline justify-between gap-3 rounded-md py-1.5 hover:bg-slate-50"
+				>
+					<span>
+						<span class="block text-sm text-slate-500">{t.pulse.empiricSites[e.key]}</span>
+						<span class="block text-[17px] font-semibold">{e.code ? abName(e.code) : '–'}</span>
+						{#if !e.adequate}<span class="block text-xs text-amber-800">{t.pulse.noAdequate}</span
+							>{/if}
+					</span>
+					<span
+						class={['text-lg font-semibold', e.adequate ? 'text-emerald-700' : 'text-amber-800']}
+						>{pct(e.coverage)}</span
+					>
+				</a>
+			{/each}
+			{#if data.warned.length}
+				<p class="mt-1 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+					{t.pulse.avoid(data.warned.map((c) => abName(c)).join(', '))}
+				</p>
+			{/if}
+			<p class="text-xs text-slate-500">{t.decisionSupport}</p>
+		</section>
+
+		<section
+			aria-labelledby="changes"
+			class="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-5"
+		>
+			<h2 id="changes" class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+				{t.pulse.changesTitle}
+			</h2>
+			{#each data.changes as c (c.organism + c.code)}
+				<div class="flex items-start gap-2 border-b border-slate-100 py-2 last:border-0">
+					<a
+						href="{resolve('/')}?{q({
+							view: 'ward',
+							organism: null,
+							cellOrg: c.organism,
+							cellAb: c.code
+						})}#detail"
+						class="min-w-0 flex-1 rounded-md hover:bg-slate-50"
+					>
+						<span class="block text-sm text-slate-600 italic">{c.organism}</span>
+						<span class="block font-semibold"
+							>{t.pulse.changeLine(abName(c.code), pct(c.recent), pct(c.annual))}</span
+						>
+					</a>
+					<button
+						type="button"
+						class="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-teal-800 hover:bg-teal-50"
+						onclick={() =>
+							askAei(t.chat.askAbout(c.organism, abName(c.code), wardName(data.input.ward)))}
+						>{t.chat.ask}</button
+					>
+				</div>
+			{:else}
+				<p class="text-sm text-slate-600">{t.pulse.noChanges}</p>
+			{/each}
+		</section>
+	</div>
+
+	<section aria-labelledby="table-title">
+		<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+			<h2 id="table-title" class="text-[17px] font-semibold">
+				{data.input.view === 'organism'
+					? t.pulse.tableByOrganism(data.input.organism)
+					: t.pulse.tableByWard(wardName(data.input.ward))}
+				<span class="ml-1 text-sm font-normal text-slate-500">· {w4 ? t.w4 : t.w12}</span>
+			</h2>
+			<div class="flex flex-wrap items-center gap-3">
+				{#if data.input.view === 'organism'}
+					<form method="GET" class="flex items-center gap-2">
+						{#each Object.entries( { ward: data.input.ward, specimen: data.input.specimen, window: data.input.window, view: 'organism', asOf: data.asOf } ) as [name, value] (name)}
+							<input type="hidden" {name} {value} />
+						{/each}
+						<label class="sr-only" for="organism">{t.organism}</label>
+						<select
+							id="organism"
+							name="organism"
+							class="min-h-9 rounded-md border-slate-300 text-sm italic"
+							onchange={submit}
+						>
+							{#each data.organisms as o (o)}
+								<option value={o} selected={data.input.organism === o}>{o}</option>
+							{/each}
+						</select>
+					</form>
+				{/if}
+				<nav
+					aria-label={t.pulse.viewLabel}
+					class="flex rounded-lg bg-slate-100 p-0.5 text-sm font-medium"
+				>
+					<a
+						href="{resolve('/')}?{q({ view: 'ward', organism: null })}"
+						aria-current={data.input.view === 'ward' ? 'true' : undefined}
+						class={[
+							'flex min-h-9 items-center rounded-md px-3',
+							data.input.view === 'ward' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+						]}>{t.pulse.viewWard}</a
+					>
+					<a
+						href="{resolve('/')}?{q({ view: 'organism', organism: data.input.organism })}"
+						aria-current={data.input.view === 'organism' ? 'true' : undefined}
+						class={[
+							'flex min-h-9 items-center rounded-md px-3',
+							data.input.view === 'organism'
+								? 'bg-white text-slate-900 shadow-sm'
+								: 'text-slate-600'
+						]}>{t.pulse.viewOrganism}</a
+					>
+				</nav>
 			</div>
+		</div>
+
+		{#if data.input.view === 'ward'}
 			{#if data.table.rows.length}
 				<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
 					<table class="w-full min-w-[760px] border-collapse text-sm">
@@ -327,36 +404,43 @@
 									</th>
 									<td
 										class="px-3 py-3 text-right align-top font-mono text-xs whitespace-nowrap text-slate-500"
-										>{w4
-											? `${row.recentIsolates} / ${row.annualIsolates}`
-											: `${row.annualIsolates} / ${row.recentIsolates}`}</td
+										>{w4 ? row.recentIsolates : row.annualIsolates}</td
 									>
 									{#each row.cells as cell (cell.code)}
 										{@const main = w4 ? cell.recent : cell.annual}
 										{@const other = w4 ? cell.annual : cell.recent}
-										{@const empty = cell.annual.n === 0 && cell.recent.n === 0}
+										{@const on =
+											data.cell?.organism === row.organism && data.cell?.code === cell.code}
 										<td
-											class={[
-												'px-2 py-3 text-right align-top whitespace-nowrap',
-												cell.rise && w4 && !lowN && 'bg-rose-50'
-											]}
+											class={['p-0 text-right align-top', cell.rise && w4 && !lowN && 'bg-rose-50']}
 										>
-											{#if empty}
-												<span class="text-slate-400" title={t.notTested}>–</span>
+											{#if cell.annual.n === 0 && cell.recent.n === 0}
+												<span class="block px-2 py-3 text-slate-400" title={t.notTested}>–</span>
 											{:else}
-												<span
+												<a
+													href="{resolve('/')}?{q({
+														cellOrg: row.organism,
+														cellAb: cell.code
+													})}#detail"
 													class={[
-														'block font-semibold tabular-nums',
-														lowN || main.n === 0
-															? 'text-slate-400'
-															: cell.rise
-																? 'text-rose-700'
-																: 'text-slate-900'
-													]}>{lowN || main.n === 0 ? '—' : pct(main.r)}</span
+														'block px-2 py-3 whitespace-nowrap hover:bg-teal-50',
+														on && 'ring-2 ring-teal-700 ring-inset'
+													]}
 												>
-												<span class="block text-[11px] text-slate-500 tabular-nums"
-													>{lowN ? pct(cell.annual.r) : other.n ? pct(other.r) : '–'}</span
-												>
+													<span
+														class={[
+															'block font-semibold tabular-nums',
+															lowN || main.n === 0
+																? 'text-slate-400'
+																: cell.rise
+																	? 'text-rose-700'
+																	: 'text-slate-900'
+														]}>{lowN || main.n === 0 ? '—' : pct(main.r)}</span
+													>
+													<span class="block text-[11px] text-slate-500 tabular-nums"
+														>{lowN ? pct(cell.annual.r) : other.n ? pct(other.r) : '–'}</span
+													>
+												</a>
 											{/if}
 										</td>
 									{/each}
@@ -365,152 +449,199 @@
 						</tbody>
 					</table>
 				</div>
-				<p class="mt-2 text-xs text-slate-500">{t.pulse.legend}</p>
+				<p class="mt-2 text-xs text-slate-500">{t.pulse.tableHint}. {t.pulse.legend}</p>
 			{:else}
 				<p class="rounded-lg border border-slate-200 bg-white p-6 text-slate-500">
 					{t.pulse.noData}
 				</p>
 			{/if}
-		</section>
-
-		<aside class="flex min-w-0 flex-[1_1_360px] flex-col gap-7">
-			{#if data.trend}
-				<section aria-labelledby="trend-title">
-					<h2 id="trend-title" class="text-[17px] font-semibold">
-						<span class="italic">{data.trend.organism}</span> · {abName(data.trend.code)} ({data
-							.trend.code})
-					</h2>
-					<p class="mb-2.5 text-xs text-slate-500">
-						{t.pulse.trendTitle} · {wardName(data.input.ward)} · {t.specimens[data.input.specimen]}
-					</p>
-					<a
-						href="{resolve('/antibiogram')}?{query({
-							organism: data.trend.organism,
-							ab: data.trend.code,
-							asOf: data.asOf
-						})}#trend"
-						class="block"
-						aria-label={t.alert.openAntibiogram}
-					>
-						<svg
-							viewBox="0 0 400 150"
-							class="block h-auto w-full"
-							role="img"
-							aria-label="{t.pulse.trendTitle}: {lastPoint ? pct(lastPoint.r) : ''}"
-						>
-							<line x1="0" y1="130" x2="400" y2="130" stroke="#DCE3E5" />
-							{#if data.trend.baseline !== null}
-								<line
-									x1="0"
-									y1={ty(data.trend.baseline)}
-									x2="400"
-									y2={ty(data.trend.baseline)}
-									stroke="#5E6E78"
-									stroke-dasharray="3 4"
-								/>
-								<text
-									x="400"
-									y={ty(data.trend.baseline) - 5}
-									text-anchor="end"
-									font-size="10"
-									fill="#5E6E78">{t.pulse.baseline(pct(data.trend.baseline))}</text
-								>
-							{/if}
-							<polyline points={trendPoints} fill="none" stroke="#0A6464" stroke-width="2" />
-							{#if lastPoint && lastPoint.r !== null}
-								<circle
-									cx="400"
-									cy={ty(lastPoint.r)}
-									r="4"
-									fill={data.table.topRise ? '#A33232' : '#0A6464'}
-								/>
-								<text
-									x="394"
-									y={ty(lastPoint.r) - 10}
-									text-anchor="end"
-									font-size="12"
-									font-weight="600"
-									fill={data.table.topRise ? '#A33232' : '#0A6464'}>{pct(lastPoint.r)}</text
-								>
-							{/if}
-							<text x="0" y="146" font-size="10" fill="#5E6E78"
-								>{monthLabel(data.trend.points[0].month)}</text
-							>
-							<text x="400" y="146" text-anchor="end" font-size="10" fill="#5E6E78"
-								>{monthLabel(data.trend.points[11].month)}</text
-							>
-						</svg>
-					</a>
-					{#if data.weekly}
-						<h3 class="mt-4 mb-2 text-sm font-semibold text-slate-600">
-							{data.weekly.label === 'resistant'
-								? `${data.trend.code} R`
-								: data.weekly.label.toUpperCase()} · {fi ? 'viikoittain' : 'per week'}
-						</h3>
-						<div
-							class="grid h-16 grid-cols-16 items-end gap-[3px]"
-							role="img"
-							aria-label={data.weekly.points.map((p) => p.value).join(', ')}
-						>
-							{#each data.weekly.points as w, i (w.to)}
-								<div
-									title="{formatDate(data.locale, w.to)}: {w.value}"
-									class={['rounded-t-sm', i >= 12 ? 'bg-rose-600' : 'bg-teal-200']}
-									style:height="{Math.max(2, (w.value / weeklyMax) * 64)}px"
-								></div>
+		{:else if data.byOrganism}
+			<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white px-2 py-1">
+				<table class="w-full min-w-[760px] border-separate border-spacing-1 text-sm">
+					<thead>
+						<tr class="text-xs text-slate-500">
+							<th class="px-2 py-2 text-left font-medium">{t.ward}</th>
+							{#each data.byOrganism.codes as code (code)}
+								<th class="px-1 py-2 text-center font-medium" title={abName(code)}>
+									<span class="block font-mono font-semibold text-slate-900">{code}</span>
+									<span class="block truncate text-[11px]"
+										>{abName(code).split('-')[0].slice(0, 11)}</span
+									>
+								</th>
 							{/each}
-						</div>
-						<div class="mt-1 flex justify-between text-[10px] text-slate-500">
-							<span>{formatDate(data.locale, data.weekly.points[0].to)}</span><span
-								>{formatDate(data.locale, data.weekly.points[15].to)}</span
-							>
-						</div>
-					{/if}
-				</section>
-			{/if}
-
-			<section aria-labelledby="empiric" class="border-t border-slate-200 pt-5">
-				<h2 id="empiric" class="mb-3 text-[17px] font-semibold">{t.empiric}</h2>
-				{#each data.empiric as e (e.site)}
-					<a
-						href="{resolve('/advisor')}?{new URLSearchParams({
-							ward: data.input.ward,
-							site: e.site,
-							asOf: data.asOf
-						}).toString()}"
-						class="flex items-baseline justify-between gap-3 border-b border-slate-100 py-2.5 hover:bg-slate-50"
-					>
-						<span>
-							<span class="block text-sm text-slate-500">{t.pulse.empiricSites[e.key]}</span>
-							{#if e.code}
-								<span class="block font-semibold text-slate-900"
-									>{abName(e.code)}
-									<span class="font-mono text-xs text-slate-500">{e.code}</span></span
+						</tr>
+					</thead>
+					<tbody>
+						{#each data.byOrganism.rows as row (row.ward)}
+							<tr>
+								<th
+									scope="row"
+									class={[
+										'px-2 py-1.5 text-left font-medium whitespace-nowrap',
+										row.ward === data.input.ward && 'text-teal-800'
+									]}
 								>
-							{/if}
-							{#if !e.adequate}<span class="block text-xs text-amber-800">{t.pulse.noAdequate}</span
-								>{/if}
-						</span>
-						<span class="text-right">
-							<span
-								class={[
-									'block text-lg font-semibold',
-									e.adequate ? 'text-emerald-700' : 'text-amber-800'
-								]}>{pct(e.coverage)}</span
-							>
-							<span class="block text-[11px] text-slate-500">{t.coverage}</span>
-						</span>
-					</a>
-				{/each}
-				{#if data.warned.length}
-					<p class="mt-3 rounded-md bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
-						{t.pulse.adviceWarn(data.warned.map((c) => `${abName(c)} (${c})`).join(', '))}
+									<span class="mr-1.5 font-mono text-xs text-slate-500">{row.ward}</span>{wardName(
+										row.ward
+									)}
+								</th>
+								{#each row.cells as cell (cell.code)}
+									{@const s = w4 ? cell.recent : cell.annual}
+									{@const on =
+										row.ward === data.input.ward &&
+										data.cell?.organism === data.input.organism &&
+										data.cell?.code === cell.code}
+									<td class="p-0">
+										<a
+											href="{resolve('/')}?{q({
+												ward: row.ward,
+												cellOrg: data.input.organism,
+												cellAb: cell.code
+											})}#detail"
+											aria-label="{row.ward} {abName(cell.code)}: {s.reliable
+												? pctP(s.p)
+												: t.insufficient}"
+											class={[
+												'block min-h-[52px] rounded-md border px-1 py-2 text-center',
+												tint(s),
+												on
+													? 'border-teal-700 ring-1 ring-teal-700'
+													: 'border-transparent hover:border-slate-300'
+											]}
+										>
+											<span class="block font-semibold tabular-nums"
+												>{s.reliable ? pctP(s.p) : '—'}</span
+											>
+											<span class="block text-[11px] text-slate-500">n={s.n}</span>
+										</a>
+									</td>
+								{/each}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<div class="mt-2.5 flex flex-wrap items-center gap-4 text-xs text-slate-600">
+				<span class="flex items-center gap-1.5"
+					><span class="size-3.5 rounded-sm border border-slate-200 bg-white"></span>{t.explorer
+						.legendLow}</span
+				>
+				<span class="flex items-center gap-1.5"
+					><span class="size-3.5 rounded-sm bg-amber-50"></span>{t.explorer.legendMid}</span
+				>
+				<span class="flex items-center gap-1.5"
+					><span class="size-3.5 rounded-sm bg-rose-50"></span>{t.explorer.legendHigh}</span
+				>
+				<span class="flex items-center gap-1.5"
+					><span class="size-3.5 rounded-sm bg-slate-100"></span>{t.insufficient}</span
+				>
+			</div>
+		{/if}
+		{#if !data.cell}<p class="mt-2 text-sm text-slate-500">{t.pulse.pickCell}</p>{/if}
+	</section>
+
+	{#if data.cell}
+		{@const c = data.cell}
+		<section
+			id="detail"
+			aria-labelledby="detail-title"
+			class="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-6"
+		>
+			<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<h2 id="detail-title" class="text-lg font-semibold">
+						<span class="italic">{c.organism}</span> · {abName(c.code)} ({c.code})
+					</h2>
+					<p class="text-sm text-slate-600">
+						{wardName(data.input.ward)} · {t.specimens[data.input.specimen]} · {t.pulse.trend24}
 					</p>
-				{/if}
-				<p class="mt-2.5 text-xs text-slate-500">{t.decisionSupport}</p>
-			</section>
-		</aside>
-	</div>
+				</div>
+				<a
+					href="{resolve('/')}?{q({ cellOrg: null, cellAb: null })}"
+					class="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+					>{t.pulse.closeDetail}</a
+				>
+			</div>
+			<div class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+				<div>
+					<svg
+						viewBox="0 0 600 170"
+						class="block h-auto w-full"
+						role="img"
+						aria-label={t.pulse.trend24}
+					>
+						<line x1="0" y1="150" x2="600" y2="150" stroke="#DCE3E5" />
+						<line x1="0" y1={cy(25)} x2="600" y2={cy(25)} stroke="#EEF2F2" />
+						<text x="0" y={cy(25) - 4} font-size="10" fill="#8A979E">{pct(25)}</text>
+						<polyline
+							points={line(c.hospital)}
+							fill="none"
+							stroke="#8A979E"
+							stroke-width="1.5"
+							stroke-dasharray="4 4"
+						/>
+						<polyline points={line(c.ward)} fill="none" stroke="#0A6464" stroke-width="2.2" />
+						<text x="0" y="166" font-size="10" fill="#5E6E78">{monthLabel(c.ward[0].month)}</text>
+						<text x="600" y="166" text-anchor="end" font-size="10" fill="#5E6E78"
+							>{monthLabel(c.ward[c.ward.length - 1].month)}</text
+						>
+					</svg>
+					<div class="mt-2 flex flex-wrap gap-5 text-xs text-slate-600">
+						<span class="flex items-center gap-1.5"
+							><span class="h-0.5 w-5 bg-teal-700"></span>{t.pulse.thisWard} ({data.input
+								.ward})</span
+						>
+						<span class="flex items-center gap-1.5"
+							><span class="h-0.5 w-5 border-t border-dashed border-slate-400"
+							></span>{t.allWards}</span
+						>
+					</div>
+				</div>
+				<div class="flex flex-col gap-4">
+					{#each [[t.w4, c.recent], [t.w12, c.annual]] as [label, s] (label)}
+						{@const share = s as Proportion}
+						<div class="border-b border-slate-100 pb-3">
+							<div class="flex items-baseline justify-between">
+								<span class="text-sm text-slate-500">{label}</span>
+								<span
+									class={[
+										'text-2xl font-semibold',
+										!share.reliable
+											? 'text-slate-400'
+											: (share.p ?? 0) >= 0.25
+												? 'text-rose-700'
+												: ''
+									]}>{share.n ? pctP(share.p) : '—'}</span
+								>
+							</div>
+							{#if share.low !== null && share.high !== null}
+								<div class="relative my-2 h-2 rounded bg-slate-100">
+									<div
+										class={[
+											'absolute inset-y-0 rounded',
+											share.reliable ? 'bg-teal-200' : 'bg-slate-300'
+										]}
+										style:left="{share.low * 100}%"
+										style:width="{(share.high - share.low) * 100}%"
+									></div>
+									<div
+										class="absolute -inset-y-1 w-0.5 bg-slate-900"
+										style:left="{(share.p ?? 0) * 100}%"
+									></div>
+								</div>
+								<div class="text-xs text-slate-600">
+									{share.k}/{share.n}
+									{t.explorer.resistantOf} · {t.explorer.ci}
+									{pctP(share.low)}–{pctP(share.high)}{share.reliable ? '' : ` · ${t.insufficient}`}
+								</div>
+							{/if}
+						</div>
+					{/each}
+					<p class="text-xs text-slate-500">{t.explorer.method}</p>
+				</div>
+			</div>
+		</section>
+	{/if}
 
 	<section aria-labelledby="hospital">
 		<h2 id="hospital" class="mb-3 text-[17px] font-semibold">{t.pulse.hospitalTitle}</h2>
@@ -518,7 +649,6 @@
 			{#each data.hospital as w (w.code)}
 				<a
 					href="{resolve('/')}?{new URLSearchParams({ ward: w.code, asOf: data.asOf }).toString()}"
-					data-sveltekit-reset="false"
 					class={[
 						'rounded-lg border px-3 py-2 transition hover:shadow-sm',
 						w.level ? LEVEL[w.level] : 'border-slate-200 bg-white text-emerald-700',
@@ -529,9 +659,6 @@
 					<span class="block truncate text-[11px] text-slate-500">{fi ? w.nameFi : w.nameEn}</span>
 					<span class="mt-1 block text-xs font-medium"
 						>{w.level ? t.alerts.levels[w.level] : t.alerts.levels.none}</span
-					>
-					<span class="block text-[11px] text-slate-500 tabular-nums"
-						>{t.w4Short}: {w.isolates}</span
 					>
 				</a>
 			{/each}

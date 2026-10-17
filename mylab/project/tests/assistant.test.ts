@@ -226,8 +226,8 @@ describe('buildAnswer', () => {
 			'ceftriaxone: 30 % resistant / 70 % susceptible (n = 40) over the last 12 months; 10 % resistant / 90 % susceptible (n = 40) the 12 months before → resistance UP 20 points;'
 		);
 		expect(answer.facts.specimen).toBe('all');
-		expect(answer.link).toMatchObject({ route: '/antibiogram' });
-		expect(answer.link.query).toBe('ward=URO&specimen=urine&organism=Escherichia+coli&ab=CRO');
+		expect(answer.link).toMatchObject({ route: '/' });
+		expect(answer.link.query).toBe('ward=URO&specimen=urine&cellOrg=Escherichia+coli&cellAb=CRO');
 		expect(answer.facts.monthlyPercentSusceptible).toHaveLength(12);
 	});
 
@@ -267,6 +267,8 @@ describe('buildAnswer', () => {
 describe('questionLanguage', () => {
 	test('detects English, French and Finnish', () => {
 		expect(questionLanguage('How is Klebsiella resistance evolving in ICU?')).toBe('English');
+		// "on" is also Finnish ("is"): an English question using it stays English.
+		expect(questionLanguage('How is E. coli doing in Urology on 2025-06-30?')).toBe('English');
 		expect(questionLanguage('Y a-t-il des alertes en cours aux urgences ?')).toBe('French');
 		expect(questionLanguage('Comment évolue la résistance ?')).toBe('French');
 		expect(questionLanguage('Onko teho-osastolla MRSA-rypäitä?')).toBe('Finnish');
@@ -363,6 +365,27 @@ describe('ask', () => {
 			via: 'json',
 			intent: { type: 'therapy', ward: 'URO', site: 'cystitis' }
 		});
+	});
+
+	test('the page ward and date fill what the question leaves open', async () => {
+		const events = await collect(
+			ask('How is E. coli doing?', data, null, { ward: 'URO', asOf: '2026-05-31' })
+		);
+		expect(events.find((e) => e.type === 'intent')).toMatchObject({
+			intent: { ward: 'URO', asOf: '2026-05-31' },
+			fromContext: ['ward', 'asOf']
+		});
+		// A named ward wins over the page, and "all wards" drops the page's ward.
+		const named = await collect(ask('How is E. coli doing in ICU?', data, null, { ward: 'URO' }));
+		expect(named.find((e) => e.type === 'intent')).toMatchObject({
+			intent: { ward: 'ICU' },
+			fromContext: []
+		});
+		const all = await collect(ask('E. coli in all wards?', data, null, { ward: 'URO' }));
+		expect(all.find((e) => e.type === 'intent')).toMatchObject({ fromContext: [] });
+		// Unknown codes from the page are ignored.
+		const bad = await collect(ask('E. coli?', data, null, { ward: 'NOPE', asOf: '1999-01-01' }));
+		expect(bad.find((e) => e.type === 'intent')).toMatchObject({ fromContext: [] });
 	});
 
 	test('model down: clear error, keyword intent and the computed answer still delivered', async () => {

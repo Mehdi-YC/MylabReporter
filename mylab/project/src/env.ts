@@ -44,5 +44,14 @@ export const variables = defineEnvVars({
 		description: 'Anthropic API key. Setting it with AI_PROVIDER=anthropic uses Claude.',
 		schema: optional
 	},
+	ADMIN_EMAILS: {
+		description:
+			'Comma-separated e-mail addresses allowed to sign in to /admin and import laboratory CSV files.',
+		schema: (value) =>
+			(value ?? '')
+				.split(',')
+				.map((e) => e.trim().toLowerCase())
+				.filter(Boolean)
+	},
 	ANTHROPIC_MODEL: { description: 'Claude model id.', schema: withDefault('claude-haiku-5-5') }
 });

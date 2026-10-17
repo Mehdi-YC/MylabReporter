@@ -28,14 +28,32 @@
 		return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'urine';
 	});
 
-	const antibiogramQuery = $derived(
+	// The resistance view with the cell behind the alert open: the drug that rose, or the drug a
+	// phenotype defeats (ESBL → ceftriaxone, CPE → meropenem, VRE → vancomycin).
+	const PHENOTYPE_DRUG: Record<string, string> = { esbl: 'CRO', cpe: 'MEM', vre: 'VAN' };
+	const organism = $derived.by(() => {
+		if (alert.organism) return alert.organism;
+		const counts: Record<string, number> = {};
+		for (const c of alert.cases) counts[c.organism] = (counts[c.organism] ?? 0) + 1;
+		return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+	});
+	const drug = $derived(
+		alert.antibiotic ?? (alert.phenotype ? PHENOTYPE_DRUG[alert.phenotype] : undefined)
+	);
+	const resistanceQuery = $derived(
 		new URLSearchParams({
 			ward: alert.ward,
 			specimen,
 			asOf,
-			...(alert.organism && alert.antibiotic
-				? { organism: alert.organism, ab: alert.antibiotic }
-				: {})
+			...(organism && drug ? { cellOrg: organism, cellAb: drug } : {})
+		}).toString()
+	);
+	const SITE: Record<string, string> = { urine: 'febrile-uti', blood: 'blood', wound: 'wound' };
+	const advisorQuery = $derived(
+		new URLSearchParams({
+			ward: alert.ward,
+			site: SITE[specimen] ?? 'febrile-uti',
+			asOf
 		}).toString()
 	);
 
@@ -66,11 +84,18 @@
 			<h3 class="text-[17px] font-semibold">{title}</h3>
 			{#if linked}<p class="mt-1 text-xs text-teal-700">↳ {t.alert.linked}</p>{/if}
 		</div>
-		<a
-			href="{resolve('/antibiogram')}?{antibiogramQuery}#trend"
-			class="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-teal-800 hover:bg-teal-50"
-			>{t.alert.openAntibiogram}</a
-		>
+		<div class="flex flex-wrap gap-2">
+			<a
+				href="{resolve('/')}?{resistanceQuery}#detail"
+				class="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-teal-800 hover:bg-teal-50"
+				>{t.alert.openAntibiogram}</a
+			>
+			<a
+				href="{resolve('/advisor')}?{advisorQuery}"
+				class="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-teal-800 hover:bg-teal-50"
+				>{t.empiric} →</a
+			>
+		</div>
 	</div>
 
 	<div class="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">

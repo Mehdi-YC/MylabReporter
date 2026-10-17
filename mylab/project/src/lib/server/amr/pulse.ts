@@ -1,4 +1,6 @@
+import type { Cookies } from '@sveltejs/kit';
 import { getDataset } from '#lib/server/amr/dataset.ts';
+import { rememberedWard, rememberWard } from '#lib/server/ward.ts';
 import { getAlerts } from '#lib/server/amr/alerts.ts';
 import { monthlyTrend, selectIsolates, type IsolateFilter } from '#lib/amr/antibiogram.ts';
 import { wardLevels, type Alert } from '#lib/amr/anomalies.ts';
@@ -13,6 +15,8 @@ import {
 import { surveillanceWindows } from '#lib/amr/dates.ts';
 import { firstIsolates } from '#lib/amr/firstIsolate.ts';
 import { pulseTable, weeklyCounts } from '#lib/amr/pulse.ts';
+import { explorerMatrix } from '#lib/amr/explorer.ts';
+import { proportion } from '#lib/amr/stats.ts';
 import { PHENOTYPES, type Specimen } from '#lib/amr/types.ts';
 
 const SPECIMENS: Specimen[] = ['urine', 'blood', 'wound'];
@@ -34,7 +38,7 @@ const byPriority = (a: Alert, b: Alert) =>
 	RANK[a.severity] - RANK[b.severity] || a.pValue - b.pValue;
 
 /** Everything the Ward Pulse and the ward-station view show for one ward (query: ward, specimen, window, asOf). */
-export async function loadWardPulse(url: URL) {
+export async function loadWardPulse(url: URL, cookies: Cookies) {
 	const data = await getDataset();
 	const q = url.searchParams;
 	const requestedAsOf = q.get('asOf');
@@ -53,9 +57,10 @@ export async function loadWardPulse(url: URL) {
 	const busiest = wardCodes
 		.map((code) => ({ code, n: recentFirst.filter((i) => i.ward === code).length }))
 		.sort((a, b) => b.n - a.n)[0].code;
-	const ward = wardCodes.includes(q.get('ward') ?? '')
-		? q.get('ward')!
-		: (alerts[0]?.ward ?? busiest);
+	// Ward: the URL, else the one chosen last on any page, else the most urgent alert's.
+	const requestedWard = wardCodes.includes(q.get('ward') ?? '') ? q.get('ward')! : undefined;
+	if (requestedWard) rememberWard(cookies, requestedWard);
+	const ward = requestedWard ?? rememberedWard(cookies, wardCodes) ?? alerts[0]?.ward ?? busiest;
 
 	// Default specimen: the ward's commonest one over 12 months.
 	const wardAnnual = selectIsolates(data.isolates, { ward }, windows.annual);
@@ -67,6 +72,7 @@ export async function loadWardPulse(url: URL) {
 		? (q.get('specimen') as Specimen)
 		: commonest;
 	const window = q.get('window') === '12m' ? '12m' : '4w';
+	const view = q.get('view') === 'organism' ? 'organism' : 'ward';
 
 	const filter: IsolateFilter = { ward, specimen };
 	const table = pulseTable(data.isolates, data.antibiotics, filter, windows);
@@ -152,12 +158,81 @@ export async function loadWardPulse(url: URL) {
 	});
 	const warned = Object.keys(warnings).filter((code) => options.some((o) => o.code === code));
 
+	// What has changed: the significant rises of the ward, largest first, in plain sentences.
+	const changes = table.rows
+		.flatMap((row) =>
+			row.cells
+				.filter((c) => c.rise && c.recent.r !== null && c.annual.r !== null)
+				.map((c) => ({
+					organism: row.organism,
+					code: c.code,
+					recent: c.recent.r!,
+					annual: c.annual.r!,
+					n: c.recent.n
+				}))
+		)
+		.sort((a, b) => b.recent - b.annual - (a.recent - a.annual))
+		.slice(0, 3);
+
+	// "By organism" view: the same table turned around, one organism across every ward.
+	const organism = data.organisms.includes(q.get('organism') ?? '')
+		? q.get('organism')!
+		: (table.rows[0]?.organism ?? data.organisms[0]);
+	const tested = new Set<string>();
+	for (const i of data.isolates)
+		if (
+			i.organism === organism &&
+			i.specimen === specimen &&
+			i.date >= windows.annual.from &&
+			i.date <= windows.annual.to
+		)
+			for (const code of Object.keys(i.results)) tested.add(code);
+	const organismCodes = data.antibiotics
+		.filter((a) => tested.has(a.code) && a.code !== 'FOX')
+		.map((a) => a.code);
+	const byOrganism =
+		view === 'organism'
+			? explorerMatrix(data.isolates, wardCodes, organismCodes, { organism, specimen }, windows)
+			: null;
+
+	// Selected cell: ward × organism × drug, with this ward's and all wards' monthly resistance.
+	const cellOrg = data.organisms.includes(q.get('cellOrg') ?? '') ? q.get('cellOrg')! : null;
+	const cellAb = data.antibiotics.some((a) => a.code === q.get('cellAb')) ? q.get('cellAb')! : null;
+	const resistantShare = (list: typeof annual, code: string) => {
+		const tested = list.filter((i) => i.results[code] !== undefined);
+		return proportion(tested.filter((i) => i.results[code] === 'R').length, tested.length);
+	};
+	const toR = (points: ReturnType<typeof monthlyTrend>) =>
+		points.map((p) => ({
+			month: p.month,
+			r: p.share.p === null ? null : Math.round((1 - p.share.p) * 1000) / 10,
+			n: p.share.n
+		}));
+	const cell =
+		cellOrg && cellAb
+			? (() => {
+					const f = { ...filter, organism: cellOrg };
+					return {
+						organism: cellOrg,
+						code: cellAb,
+						recent: resistantShare(selectIsolates(data.isolates, f, windows.recent), cellAb),
+						annual: resistantShare(selectIsolates(data.isolates, f, windows.annual), cellAb),
+						ward: toR(monthlyTrend(data.isolates, f, cellAb, asOf, 24)),
+						hospital: toR(monthlyTrend(data.isolates, { ...f, ward: undefined }, cellAb, asOf, 24))
+					};
+				})()
+			: null;
+
 	const levels = wardLevels(alerts);
 	return {
 		asOf,
 		range: { first: data.firstDate, last: data.lastDate },
 		windows,
-		input: { ward, specimen, window },
+		input: { ward, specimen, window, view, organism },
+		organisms: data.organisms,
+		changes,
+		byOrganism: byOrganism ? { codes: organismCodes, rows: byOrganism } : null,
+		cell,
 		wards: data.wards,
 		antibiotics: data.antibiotics.map((a) => ({ code: a.code, name: a.name, nameFi: a.nameFi })),
 		primary: primary

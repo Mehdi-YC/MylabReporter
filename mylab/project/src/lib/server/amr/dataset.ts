@@ -140,3 +140,9 @@ export async function getDataset(): Promise<Dataset> {
 	})();
 	return pending;
 }
+
+/** Forces the next `getDataset()` to reload, e.g. right after an import changed rows in place. */
+export function invalidateDataset(): void {
+	cache = null;
+	checkedAt = 0;
+}

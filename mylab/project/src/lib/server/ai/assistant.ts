@@ -15,7 +15,14 @@ export type IntentSource = 'tools' | 'json' | 'keywords';
 
 export type AskEvent =
 	| { type: 'status'; message: string }
-	| { type: 'intent'; intent: Intent; via: IntentSource; dropped: string[] }
+	| {
+			type: 'intent';
+			intent: Intent;
+			via: IntentSource;
+			dropped: string[];
+			/** Fields taken from the page the question was asked on. */
+			fromContext: ('ward' | 'asOf')[];
+	  }
 	| { type: 'answer'; answer: Answer }
 	| { type: 'token'; text: string }
 	| { type: 'check'; unsupported: string[] }
@@ -76,10 +83,21 @@ export function unsupportedNumbers(text: string, facts: unknown, question = ''):
  * in it comes from the surveillance functions. Without a model (or when it
  * fails) the deterministic answer is still complete.
  */
+/** What the user is looking at when asking: the page's ward and reference date. */
+export interface AskContext {
+	ward?: string;
+	asOf?: string;
+}
+
+/** "In the whole hospital": the page's ward must not narrow the answer. */
+const WHOLE_HOSPITAL =
+	/all wards|whole hospital|hospital-wide|kaikki osastot|koko sairaala|kaikilla osastoilla|tous les services|tout l.h[oô]pital/i;
+
 export async function* ask(
 	question: string,
 	data: AnswerData,
-	provider: LlmProvider | null
+	provider: LlmProvider | null,
+	context: AskContext = {}
 ): AsyncGenerator<AskEvent> {
 	const started = Date.now();
 	const keywords = keywordIntent(question, data);
@@ -140,7 +158,27 @@ export async function* ask(
 			model = null;
 		}
 	}
-	yield { type: 'intent', intent, via, dropped };
+	// Fill what the question leaves open from the page it was asked on.
+	const fromContext: ('ward' | 'asOf')[] = [];
+	if (
+		!intent.ward &&
+		context.ward &&
+		data.wards.some((w) => w.code === context.ward) &&
+		!WHOLE_HOSPITAL.test(question)
+	) {
+		intent = { ...intent, ward: context.ward };
+		fromContext.push('ward');
+	}
+	if (
+		!intent.asOf &&
+		context.asOf &&
+		context.asOf >= data.firstDate &&
+		context.asOf <= data.lastDate
+	) {
+		intent = { ...intent, asOf: context.asOf };
+		fromContext.push('asOf');
+	}
+	yield { type: 'intent', intent, via, dropped, fromContext };
 
 	const answer = buildAnswer(intent, data);
 	yield { type: 'answer', answer };

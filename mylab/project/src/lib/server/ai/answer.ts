@@ -41,7 +41,8 @@ export interface Answer {
 	summary: string;
 	/** The aggregates the answer rests on: this, and only this, is sent to the language model. */
 	facts: Record<string, unknown>;
-	link: { route: '/antibiogram' | '/alerts' | '/advisor'; query: string; label: string };
+	/** Pre-filtered page that shows the same figures (the chat's "open the view" link). */
+	link: { route: '/' | '/alerts' | '/advisor'; query: string; label: string };
 }
 
 const SPECIMENS: Specimen[] = ['urine', 'blood', 'wound'];
@@ -169,7 +170,10 @@ function resistanceAnswer(intent: Intent, data: AnswerData, asOf: string): Answe
 			`${focus.name}: ${fmtSR(focus.last12Months)} over the last 12 months; ${fmtSR(focus.previous12Months)} the 12 months before${trend}${focus.previous12Months.lowN || focus.last12Months.lowN ? ' (small numbers)' : ''}; last 4 weeks ${fmtSR(focus.last4Weeks)}.`
 		);
 		const drops = drugs.filter((d) => d.recentDrop).map((d) => d.name);
-		if (drops.length) lines.push(`Significant drop in the last 4 weeks: ${drops.join(', ')}.`);
+		if (drops.length)
+			lines.push(
+				`Significant RISE in resistance in the last 4 weeks (vs the ward’s 12 months): ${drops.join(', ')}.`
+			);
 		const others = drugs
 			.filter((d) => d !== focus && !intent.antibiotic)
 			.map((d) => `${d.name} ${100 - (d.last12Months.pct ?? 0)} %`);
@@ -220,10 +224,20 @@ function resistanceAnswer(intent: Intent, data: AnswerData, asOf: string): Answe
 			...(hospitalWide ? { allWardsLast12Months: { [focus!.name]: hospitalWide } } : {}),
 			...(trend ? { monthlyPercentSusceptible: trend } : {})
 		},
+		// One ward: that ward's table with the organism × drug cell open. All wards: the
+		// organism compared across wards.
 		link: {
-			route: '/antibiogram',
-			query: query({ ward, specimen: linkSpecimen, organism, ab: focus?.code, asOf: intent.asOf }),
-			label: 'Open the antibiogram and trend'
+			route: '/',
+			query: ward
+				? query({
+						ward,
+						specimen: linkSpecimen,
+						cellOrg: organism,
+						cellAb: focus?.code,
+						asOf: intent.asOf
+					})
+				: query({ view: 'organism', organism, specimen: linkSpecimen, asOf: intent.asOf }),
+			label: 'Open the resistance view'
 		}
 	};
 }
