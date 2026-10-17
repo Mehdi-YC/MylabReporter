@@ -30,6 +30,30 @@
 			: 'All wards'
 	);
 
+	/** Empirical-therapy syndromes that use this specimen as evidence. */
+	const SYNDROMES = {
+		urine: [
+			{ site: 'cystitis', label: 'Cystitis' },
+			{ site: 'febrile-uti', label: 'Febrile UTI' }
+		],
+		blood: [{ site: 'blood', label: 'Bloodstream infection' }],
+		wound: [{ site: 'wound', label: 'Skin / wound infection' }]
+	} as const;
+
+	/** Same ward and patients in the therapy advisor. */
+	function advisorQuery(site: string): string {
+		const params: Record<string, string | undefined> = {
+			ward: data.filter.ward,
+			site,
+			sex: data.filter.sex,
+			onset: data.filter.onset,
+			asOf: data.asOf
+		};
+		return new URLSearchParams(
+			Object.entries(params).filter((e): e is [string, string] => !!e[1])
+		).toString();
+	}
+
 	const submit = (e: Event) => (e.currentTarget as HTMLSelectElement).form?.requestSubmit();
 </script>
 
@@ -105,6 +129,26 @@
 	{/if}
 	<noscript><button class="rounded-md bg-teal-700 px-3 py-2 text-white">Apply</button></noscript>
 </form>
+
+<div
+	class="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm"
+>
+	<span class="text-teal-900"
+		>Before culture results: which antibiotic covers these patients{data.filter.ward
+			? ` in ${data.filter.ward}`
+			: ''}?</span
+	>
+	{#each SYNDROMES[data.filter.specimen ?? 'urine'] as s (s.site)}
+		<a
+			href="{resolve('/advisor')}?{advisorQuery(s.site)}"
+			class="rounded-md bg-white px-2.5 py-1 font-medium text-teal-800 ring-1 ring-teal-200 hover:bg-teal-100"
+			>{s.label} → advisor</a
+		>
+	{/each}
+	{#if !data.filter.ward}
+		<span class="text-xs text-teal-800">(the advisor works per ward: ED by default)</span>
+	{/if}
+</div>
 
 <section class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
 	{#if data.rows.length === 0}

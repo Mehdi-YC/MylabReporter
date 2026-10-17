@@ -35,6 +35,22 @@
 			.join(' · ')
 	);
 
+	/** Same patients in the ward antibiogram (per organism), optionally on one drug's trend. */
+	function antibiogramQuery(code?: string): string {
+		const params: Record<string, string | undefined> = {
+			ward: data.input.ward,
+			specimen: data.input.specimen,
+			sex: data.input.sex,
+			onset: data.input.onset,
+			asOf: data.input.asOf
+		};
+		const organism = code ? data.trendOrganism[code] : null;
+		if (code && organism) Object.assign(params, { organism, ab: code });
+		return new URLSearchParams(
+			Object.entries(params).filter((e): e is [string, string] => !!e[1])
+		).toString();
+	}
+
 	const submit = (e: Event) =>
 		(e.currentTarget as HTMLSelectElement | HTMLInputElement).form?.requestSubmit();
 </script>
@@ -134,6 +150,11 @@
 				</div>
 				<span class="text-slate-500">{wardName}</span>
 			</div>
+			<a
+				href="{resolve('/antibiogram')}?{antibiogramQuery()}"
+				class="mt-2 inline-block text-teal-700 hover:underline"
+				>Per-organism detail: {data.input.ward} {data.input.specimen} antibiogram →</a
+			>
 			{#if data.context.fallback}
 				<p class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-amber-900">
 					Fewer than 30 isolates in {data.input.ward} for this profile: coverage is computed from all
@@ -231,6 +252,16 @@
 						<div class="font-medium">
 							{abName(o.code)} <span class="text-xs text-slate-400">{o.code}</span>
 						</div>
+						{#if data.trendOrganism[o.code]}
+							<a
+								href="{resolve('/antibiogram')}?{antibiogramQuery(o.code)}#trend"
+								class="text-[11px] text-teal-700 hover:underline"
+								title="Monthly trend of {abName(o.code)} for {data.trendOrganism[
+									o.code
+								]} in the antibiogram"
+								>trend · <span class="italic">{data.trendOrganism[o.code]}</span></a
+							>
+						{/if}
 						{#if data.notes[o.code]?.tag}
 							<span
 								class="mt-0.5 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600"
