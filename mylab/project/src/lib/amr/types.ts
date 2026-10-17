@@ -12,6 +12,8 @@ export interface IsolateRecord {
 	patientId: string;
 	sex: Sex;
 	age: number;
+	/** Patient's home area (synthetic catchment areas around the hospital: Centre, North…). */
+	homeArea: string;
 	/** Sample date, ISO `YYYY-MM-DD`. */
 	date: string;
 	ward: string;

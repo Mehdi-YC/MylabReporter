@@ -29,6 +29,16 @@ bun run dev
 - The server keeps the dataset in memory and polls the database every 30 s; new results written by
   the laboratory feed appear without a restart – `src/lib/server/amr/dataset.ts`.
 
+## Map (`/map`)
+
+- **Regional view**: the patients' `home_area` (five synthetic areas around Tyks: Centre, North,
+  East, South, West), drawn as a schematic catchment and coloured by % resistant to a drug, % ESBL,
+  % MRSA or first-isolate count, with ward / specimen / date filters and a 4-week vs 12-month
+  switch. Areas under 30 isolates are hatched – `src/lib/amr/regions.ts`.
+- **European view**: real national EARS-Net 2024 figures (ECDC) in `data/ears-net.csv` (see
+  `data/ears-net.md`), drawn as an SVG choropleth (`world-atlas` + `d3-geo`, projected on the server),
+  with Finland highlighted next to the dataset's own blood-culture value.
+
 ## Ask the data (`/ask`, local LLM)
 
 Questions in English, French or Finnish go through `src/lib/server/ai/`:
