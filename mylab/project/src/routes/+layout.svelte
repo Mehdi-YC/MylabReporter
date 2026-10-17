@@ -5,20 +5,20 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { formatDate, formatDateTime, messages } from '#lib/i18n.ts';
+	import AskChat from '#lib/components/AskChat.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
 
 	const t = $derived(messages[data.locale]);
 
+	// Four entries: the resistance page (ward pulse, antibiogram and explorer in one), anomalies,
+	// empiric guidance and the map. The assistant is the chat at the bottom of every page.
 	const nav = $derived([
 		{ label: t.nav.pulse, route: '/', href: resolve('/') },
 		{ label: t.nav.anomalies, route: '/alerts', href: resolve('/alerts'), badge: true },
-		{ label: t.nav.explorer, route: '/explorer', href: resolve('/explorer') },
-		{ label: t.nav.antibiogram, route: '/antibiogram', href: resolve('/antibiogram') },
 		{ label: t.nav.advisor, route: '/advisor', href: resolve('/advisor') },
-		{ label: t.nav.map, route: '/map', href: resolve('/map') },
-		{ label: t.nav.ask, route: '/ask', href: resolve('/ask') }
+		{ label: t.nav.map, route: '/map', href: resolve('/map') }
 	]);
 
 	// The ward-station view is a kiosk: no application chrome.
@@ -146,8 +146,11 @@
 			</div>
 		</header>
 
-		<main class="mx-auto max-w-[1440px] px-4 py-6 sm:px-8">
+		<main class="mx-auto max-w-[1440px] px-4 pt-6 pb-24 sm:px-8">
 			{@render children()}
 		</main>
 	</div>
+	{#if page.route.id !== '/ask'}
+		<AskChat locale={data.locale} />
+	{/if}
 {/if}

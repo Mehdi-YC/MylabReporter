@@ -35,13 +35,17 @@ The UI is Finnish by default with a full FI | EN toggle in the header (stored in
 cookie, so it persists across screens); texts live in `src/lib/i18n.ts`. Organism names stay in Latin
 and WHONET codes (CIP, CRO, MEM…) stay visible in both languages.
 
-| Route       | Screen                                                                                   |
-| ----------- | ---------------------------------------------------------------------------------------- |
-| `/`         | Osaston pulssi / Ward Pulse: one ward, its primary anomaly, R % 4 weeks vs 12 months     |
-| `/alerts`   | Poikkeamien inbox / Anomaly Inbox: ranked alerts with "why it fired", weekly replay      |
-| `/explorer` | AEI-selain / Explorer: ward × antibiotic resistance matrix, n ≥ 30, Wilson intervals     |
-| `/status`   | Synkronoinnin tila / Ingestion health: pipeline, volumes and live data-quality checks    |
-| `/station`  | Osastopääte / Ward station: compact kiosk view for a ward screen, refreshes every minute |
+| Route      | Screen                                                                                                                                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`        | Resistenssi / Resistance: one ward's status, what to give, what has changed, then one resistance table _by ward_ (former antibiogram) or _by organism_ (former explorer); a cell opens its 24-month trend and confidence interval |
+| `/alerts`  | Poikkeamien inbox / Anomaly Inbox: ranked alerts with "why it fired", weekly replay                                                                                                                                               |
+| `/advisor` | Empirical therapy advisor                                                                                                                                                                                                         |
+| `/map`     | Regional and European map                                                                                                                                                                                                         |
+| `/status`  | Synkronoinnin tila / Ingestion health: pipeline, volumes and live data-quality checks                                                                                                                                             |
+| `/station` | Osastopääte / Ward station: compact kiosk view for a ward screen, refreshes every minute                                                                                                                                          |
+
+The assistant is a chat at the bottom right of every page (`/ask` still works as a full page).
+`/antibiogram` and `/explorer` redirect to the matching view of `/`, so older links keep working.
 
 Visual system (IBM Plex, medical teal / slate navy, red and amber only for anomalies) is defined as
 Tailwind theme tokens in `src/routes/layout.css`.

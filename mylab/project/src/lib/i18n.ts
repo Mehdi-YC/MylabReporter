@@ -20,7 +20,7 @@ const fi = {
 	language: 'Kieli / Language',
 	nav: {
 		label: 'Päävalikko',
-		pulse: 'Osaston pulssi',
+		pulse: 'Resistenssi',
 		anomalies: 'Poikkeamat',
 		explorer: 'AEI-selain',
 		antibiogram: 'Antibiogrammi',
@@ -95,7 +95,24 @@ const fi = {
 			`Aktiivinen poikkeama heikentää näitä vaihtoehtoja: ${drugs}. Katso empiirinen ohjaus.`,
 		openAdvisor: 'Avaa empiirinen ohjaus',
 		hospitalTitle: 'Kaikki osastot',
-		noData: 'Ei isolaatteja valitulla rajauksella.'
+		noData: 'Ei isolaatteja valitulla rajauksella.',
+		viewLabel: 'Näkymä',
+		viewWard: 'Osaston mukaan',
+		viewOrganism: 'Bakteerin mukaan',
+		statusTitle: 'Osaston tilanne',
+		giveTitle: 'Mitä antaa empiirisesti?',
+		avoid: (drugs: string) => `Vältä nyt: ${drugs}.`,
+		changesTitle: 'Mitä on muuttunut',
+		noChanges: 'Ei merkitseviä resistenssin nousuja viimeisen 4 viikon aikana.',
+		changeLine: (ab: string, now: string, before: string) =>
+			`${ab}-resistenssi ${now} (tavallisesti ${before})`,
+		tableByWard: (ward: string) => `Resistenssi (R %) · ${ward}`,
+		tableByOrganism: (organism: string) => `${organism} · resistenssi osastoittain`,
+		pickCell: 'Valitse solu nähdäksesi kehityksen 24 kuukauden ajalta.',
+		trend24: 'Resistenssi kuukausittain, 24 kuukautta',
+		thisWard: 'Tämä osasto',
+		closeDetail: 'Sulje',
+		details: 'Näytä taulukko ja kehitys'
 	},
 	alerts: {
 		title: 'Poikkeamien inbox',
@@ -172,7 +189,7 @@ const fi = {
 				'Etsi yhteistä lähdettä (laite, toimenpide, henkilökunta) infektioiden torjunnan kanssa.'
 		},
 		linked: 'Liittyy samaan rypääseen (samat potilaat)',
-		openAntibiogram: 'Avaa antibiogrammi →',
+		openAntibiogram: 'Avaa resistenssinäkymä →',
 		cases: (n: number) => `${n} tapaus${n > 1 ? 'ta' : ''}`,
 		colDate: 'Päivä',
 		colPatient: 'Potilas',
@@ -235,6 +252,28 @@ const fi = {
 			guidelines: 'Tulkintaohje'
 		}
 	},
+	chat: {
+		open: 'Kysy AEI:ltä',
+		title: 'Kysy laboratoriodatasta',
+		intro:
+			'Kysy suomeksi, englanniksi tai ranskaksi. Luvut lasketaan samoilla funktioilla kuin muualla AEI:ssa; kielimalli vain muotoilee ne.',
+		placeholder: 'Kirjoita kysymys…',
+		send: 'Lähetä',
+		close: 'Sulje keskustelu',
+		thinking: 'Haetaan tietoja…',
+		writing: 'Kielimalli muotoilee vastausta…',
+		computed: 'Laskettu vastaus',
+		modelAnswer: 'Vastaus',
+		openView: 'Avaa näkymä',
+		checked: 'Kaikki luvut vastaavat laskettua dataa',
+		unchecked: (n: string) => `Lukuja, joita ei löydy datasta: ${n}`,
+		failed: 'Pyyntö epäonnistui.',
+		examples: [
+			'Miten Klebsiellan resistenssi kehittyy teho-osastolla?',
+			'Onko teho-osastolla MRSA-rypäitä?',
+			'Mitä antibioottia annan 78-vuotiaalle miehelle, jolla on kuumeinen virtsatieinfektio urologialla?'
+		]
+	},
 	station: {
 		updated: 'Päivitetty',
 		calm: 'Ei merkittäviä poikkeamia viimeisen 4 viikon aikana',
@@ -256,7 +295,7 @@ const en: Messages = {
 	language: 'Kieli / Language',
 	nav: {
 		label: 'Main menu',
-		pulse: 'Ward Pulse',
+		pulse: 'Resistance',
 		anomalies: 'Anomalies',
 		explorer: 'AEI Explorer',
 		antibiogram: 'Antibiogram',
@@ -331,7 +370,24 @@ const en: Messages = {
 			`An active anomaly weakens these options: ${drugs}. See empiric guidance.`,
 		openAdvisor: 'Open empiric guidance',
 		hospitalTitle: 'All wards',
-		noData: 'No isolates for this selection.'
+		noData: 'No isolates for this selection.',
+		viewLabel: 'View',
+		viewWard: 'By ward',
+		viewOrganism: 'By organism',
+		statusTitle: 'Ward status',
+		giveTitle: 'What to give empirically?',
+		avoid: (drugs: string) => `Avoid for now: ${drugs}.`,
+		changesTitle: 'What has changed',
+		noChanges: 'No significant rise in resistance in the last 4 weeks.',
+		changeLine: (ab: string, now: string, before: string) =>
+			`${ab} resistance ${now} (usually ${before})`,
+		tableByWard: (ward: string) => `Resistance (R %) · ${ward}`,
+		tableByOrganism: (organism: string) => `${organism} · resistance by ward`,
+		pickCell: 'Pick a cell to see its trend over 24 months.',
+		trend24: 'Monthly resistance, 24 months',
+		thisWard: 'This ward',
+		closeDetail: 'Close',
+		details: 'Show table and trend'
 	},
 	alerts: {
 		title: 'Anomaly Inbox',
@@ -402,7 +458,7 @@ const en: Messages = {
 				'Check for a common source (device, procedure, staff) with infection control.'
 		},
 		linked: 'Linked to the same cluster (same patients)',
-		openAntibiogram: 'Open antibiogram →',
+		openAntibiogram: 'Open resistance view →',
 		cases: (n: number) => `${n} case${n > 1 ? 's' : ''}`,
 		colDate: 'Date',
 		colPatient: 'Patient',
@@ -463,6 +519,28 @@ const en: Messages = {
 			orphans: 'Every susceptibility result has an isolate',
 			guidelines: 'Interpretation guideline'
 		}
+	},
+	chat: {
+		open: 'Ask AEI',
+		title: 'Ask the laboratory data',
+		intro:
+			'Ask in English, Finnish or French. Figures are computed by the same functions as the rest of AEI; the language model only words them.',
+		placeholder: 'Type a question…',
+		send: 'Send',
+		close: 'Close chat',
+		thinking: 'Looking up the data…',
+		writing: 'The language model is wording the answer…',
+		computed: 'Computed answer',
+		modelAnswer: 'Answer',
+		openView: 'Open the view',
+		checked: 'Every figure matches the computed data',
+		unchecked: (n: string) => `Figures not found in the data: ${n}`,
+		failed: 'The request failed.',
+		examples: [
+			'How is Klebsiella resistance evolving in ICU?',
+			'Is there an MRSA cluster in ICU?',
+			'What should I give a 78-year-old man with febrile UTI in Urology?'
+		]
 	},
 	station: {
 		updated: 'Updated',
