@@ -288,7 +288,7 @@ export function keywordIntent(question: string, catalog: Catalog): Intent {
 	return validateIntent(raw, catalog).intent;
 }
 
-const FINNISH_WORDS = /\b(onko|mita|miten|kuinka|mika|ja|on|osasto\w*|vuotia\w*|resistenssi\w*)\b/;
+const FINNISH_WORDS = /\b(onko|mita|miten|kuinka|mika|osasto\w*|vuotia\w*|resistenssi\w*)\b/;
 const FRENCH_WORDS =
 	/\b(le|la|les|des|du|est|comment|quel\w*|pour|dans|une|aux|y a-t-il|evolue|faut-il)\b/;
 

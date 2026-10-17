@@ -170,7 +170,10 @@ function resistanceAnswer(intent: Intent, data: AnswerData, asOf: string): Answe
 			`${focus.name}: ${fmtSR(focus.last12Months)} over the last 12 months; ${fmtSR(focus.previous12Months)} the 12 months before${trend}${focus.previous12Months.lowN || focus.last12Months.lowN ? ' (small numbers)' : ''}; last 4 weeks ${fmtSR(focus.last4Weeks)}.`
 		);
 		const drops = drugs.filter((d) => d.recentDrop).map((d) => d.name);
-		if (drops.length) lines.push(`Significant drop in the last 4 weeks: ${drops.join(', ')}.`);
+		if (drops.length)
+			lines.push(
+				`Significant RISE in resistance in the last 4 weeks (vs the ward’s 12 months): ${drops.join(', ')}.`
+			);
 		const others = drugs
 			.filter((d) => d !== focus && !intent.antibiotic)
 			.map((d) => `${d.name} ${100 - (d.last12Months.pct ?? 0)} %`);

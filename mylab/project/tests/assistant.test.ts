@@ -267,6 +267,8 @@ describe('buildAnswer', () => {
 describe('questionLanguage', () => {
 	test('detects English, French and Finnish', () => {
 		expect(questionLanguage('How is Klebsiella resistance evolving in ICU?')).toBe('English');
+		// "on" is also Finnish ("is"): an English question using it stays English.
+		expect(questionLanguage('How is E. coli doing in Urology on 2025-06-30?')).toBe('English');
 		expect(questionLanguage('Y a-t-il des alertes en cours aux urgences ?')).toBe('French');
 		expect(questionLanguage('Comment évolue la résistance ?')).toBe('French');
 		expect(questionLanguage('Onko teho-osastolla MRSA-rypäitä?')).toBe('Finnish');
