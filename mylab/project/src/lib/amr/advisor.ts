@@ -1,6 +1,22 @@
 import type { Alert } from './anomalies';
 import { proportion, type Proportion } from './stats';
-import type { AntibioticInfo, IsolateRecord } from './types';
+import type { AntibioticInfo, IsolateRecord, Specimen } from './types';
+
+/** Clinical syndrome → culture specimen used as evidence. */
+export const SITES = {
+	cystitis: { label: 'Cystitis (lower UTI)', specimen: 'urine' },
+	'febrile-uti': { label: 'Febrile UTI / pyelonephritis', specimen: 'urine' },
+	blood: { label: 'Bloodstream infection', specimen: 'blood' },
+	wound: { label: 'Skin / wound infection', specimen: 'wound' }
+} as const satisfies Record<string, { label: string; specimen: Specimen }>;
+export type Site = keyof typeof SITES;
+
+export const AGE_GROUPS = {
+	child: { label: '< 18', min: 0, max: 17 },
+	adult: { label: '18–64', min: 18, max: 64 },
+	elderly: { label: '≥ 65', min: 65, max: 200 }
+} as const;
+export type AgeGroup = keyof typeof AGE_GROUPS;
 
 /**
  * Narrow → broad, used to point at the narrowest drug that reaches the coverage target
