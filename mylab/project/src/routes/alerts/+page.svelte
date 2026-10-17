@@ -16,6 +16,9 @@
 		return idx;
 	});
 
+	// Centre of the selected week's column, as a share of the timeline width.
+	const weekPosition = $derived((weekIndex + 0.5) / data.timeline.length);
+
 	let playing = $state(false);
 
 	function show(asOf: string) {
@@ -118,41 +121,67 @@
 		<h2 class="font-semibold">{t.alerts.history}</h2>
 		<span class="text-sm text-slate-500">{t.alerts.historyHint}</span>
 	</div>
-	<div class="grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-0.5 text-xs">
-		{#each data.wards as ward (ward.code)}
-			<div class="truncate py-0.5 font-mono font-medium text-slate-600" title={wardName(ward.code)}>
-				{ward.code}
-			</div>
-			<div
-				class="grid gap-px"
-				style:grid-template-columns="repeat({data.timeline.length}, minmax(0, 1fr))"
+	<div class="flex gap-2 text-xs">
+		<div class="flex w-[4.5rem] shrink-0 flex-col gap-0.5 pt-8">
+			{#each data.wards as ward (ward.code)}
+				<div
+					class="h-4 truncate font-mono leading-4 font-medium text-slate-600"
+					title={wardName(ward.code)}
+				>
+					{ward.code}
+				</div>
+			{/each}
+		</div>
+		<div class="relative min-w-0 flex-1 pt-8">
+			<!-- The selected week: a band over its column and the date above it. -->
+			<span
+				class={[
+					'absolute top-0 rounded-md bg-teal-700 px-2 py-1 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm',
+					weekPosition < 0.12
+						? '-translate-x-2'
+						: weekPosition > 0.88
+							? '-translate-x-full'
+							: '-translate-x-1/2'
+				]}
+				style:left="{weekPosition * 100}%"
+				aria-live="polite">{t.alerts.selectedWeek(formatDate(data.locale, data.asOf))}</span
 			>
-				{#each data.timeline as week, i (week.asOf)}
-					{@const status = week.wards[ward.code]}
-					<a
-						href={resolve(`/alerts?asOf=${week.asOf}`)}
-						data-sveltekit-reset="false"
-						title="{ward.code} · {t.alerts.weekEnding} {formatDate(data.locale, week.asOf)}{status
-							? ` · ${status}`
-							: ''}"
-						class={[
-							'h-4 rounded-[2px]',
-							LEVEL_CELL[status ?? 'none'],
-							i === weekIndex && 'outline-2 outline-offset-1 outline-slate-900'
-						]}
-						aria-label="{ward.code}, {t.alerts.weekEnding} {formatDate(data.locale, week.asOf)}"
-					></a>
+			<div
+				class="pointer-events-none absolute top-6 bottom-5 rounded-[3px] bg-teal-500/15 ring-2 ring-teal-700"
+				style:left="calc({(weekIndex / data.timeline.length) * 100}% - 2px)"
+				style:width="calc({100 / data.timeline.length}% + 3px)"
+			></div>
+			<div class="flex flex-col gap-0.5">
+				{#each data.wards as ward (ward.code)}
+					<div
+						class="grid gap-px"
+						style:grid-template-columns="repeat({data.timeline.length}, minmax(0, 1fr))"
+					>
+						{#each data.timeline as week, i (week.asOf)}
+							{@const status = week.wards[ward.code]}
+							<a
+								href={resolve(`/alerts?asOf=${week.asOf}`)}
+								data-sveltekit-reset="false"
+								title="{ward.code} · {t.alerts.weekEnding} {formatDate(
+									data.locale,
+									week.asOf
+								)}{status ? ` · ${status}` : ''}"
+								class={['h-4 rounded-[2px]', LEVEL_CELL[status ?? 'none']]}
+								aria-current={i === weekIndex ? 'date' : undefined}
+								aria-label="{ward.code}, {t.alerts.weekEnding} {formatDate(data.locale, week.asOf)}"
+							></a>
+						{/each}
+					</div>
 				{/each}
 			</div>
-		{/each}
-		<div></div>
-		<div class="relative h-5">
-			{#each yearMarks as mark (mark.i)}
-				<span
-					class="absolute top-1 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-400"
-					style:left="{(mark.i / data.timeline.length) * 100}%">{mark.label}</span
-				>
-			{/each}
+			<div class="relative h-5">
+				{#each yearMarks as mark (mark.i)}
+					<span
+						class="absolute top-1 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-400"
+						style:left="{(mark.i / data.timeline.length) * 100}%">{mark.label}</span
+					>
+				{/each}
+			</div>
 		</div>
 	</div>
 	<div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
@@ -171,7 +200,9 @@
 
 <section class="mb-5">
 	<div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-		<h2 class="text-lg font-semibold">
+		<h2 class="flex items-center text-lg font-semibold">
+			<span class="mr-2 size-3 rounded-[3px] bg-teal-500/15 ring-2 ring-teal-700" aria-hidden="true"
+			></span>
 			{t.alerts.situation(formatDate(data.locale, data.asOf))}
 			{#if data.asOf === data.lastDate}<span
 					class="ml-2 rounded bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-800"
