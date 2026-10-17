@@ -1,4 +1,10 @@
-import { alertTimeline, DEFAULT_OPTIONS, type TimelineWeek } from '#lib/amr/anomalies.ts';
+import {
+	alertTimeline,
+	DEFAULT_OPTIONS,
+	detectAnomalies,
+	type Alert,
+	type TimelineWeek
+} from '#lib/amr/anomalies.ts';
 import { addDays } from '#lib/amr/dates.ts';
 import type { Dataset } from './dataset.ts';
 
@@ -14,4 +20,18 @@ export function getAlertTimeline(data: Dataset): TimelineWeek[] {
 	const weeks = alertTimeline(data.isolates, from, data.lastDate);
 	cache = { version: data.version, weeks };
 	return weeks;
+}
+
+const current = new Map<string, Alert[]>();
+
+/** Alerts for one reference date, cached per dataset version (the header shows them on every page). */
+export function getAlerts(data: Dataset, asOf: string = data.lastDate): Alert[] {
+	const key = `${data.version}|${asOf}`;
+	let alerts = current.get(key);
+	if (!alerts) {
+		alerts = detectAnomalies(data.isolates, asOf);
+		if (current.size > 50) current.clear();
+		current.set(key, alerts);
+	}
+	return alerts;
 }

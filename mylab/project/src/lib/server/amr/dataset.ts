@@ -26,7 +26,7 @@ export interface Dataset {
 }
 
 /** How often the database is polled for new results. */
-const REFRESH_MS = 30_000;
+export const REFRESH_MS = 30_000;
 
 let cache: Dataset | null = null;
 let checkedAt = 0;

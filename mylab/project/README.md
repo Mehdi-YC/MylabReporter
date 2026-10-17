@@ -29,6 +29,23 @@ bun run dev
 - The server keeps the dataset in memory and polls the database every 30 s; new results written by
   the laboratory feed appear without a restart – `src/lib/server/amr/dataset.ts`.
 
+## Screens and languages
+
+The UI is Finnish by default with a full FI | EN toggle in the header (stored in the `aei-locale`
+cookie, so it persists across screens); texts live in `src/lib/i18n.ts`. Organism names stay in Latin
+and WHONET codes (CIP, CRO, MEM…) stay visible in both languages.
+
+| Route       | Screen                                                                                   |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| `/`         | Osaston pulssi / Ward Pulse: one ward, its primary anomaly, R % 4 weeks vs 12 months     |
+| `/alerts`   | Poikkeamien inbox / Anomaly Inbox: ranked alerts with "why it fired", weekly replay      |
+| `/explorer` | AEI-selain / Explorer: ward × antibiotic resistance matrix, n ≥ 30, Wilson intervals     |
+| `/status`   | Synkronoinnin tila / Ingestion health: pipeline, volumes and live data-quality checks    |
+| `/station`  | Osastopääte / Ward station: compact kiosk view for a ward screen, refreshes every minute |
+
+Visual system (IBM Plex, medical teal / slate navy, red and amber only for anomalies) is defined as
+Tailwind theme tokens in `src/routes/layout.css`.
+
 ## Map (`/map`)
 
 - **Regional view**: the patients' `home_area` (five synthetic areas around Tyks: Centre, North,
