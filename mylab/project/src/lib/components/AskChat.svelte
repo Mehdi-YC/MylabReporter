@@ -20,6 +20,8 @@
 		errors: string[];
 		model: string | null;
 		running: boolean;
+		/** Page filters the assistant used for what the question left open. */
+		fromPage: string[];
 	}
 
 	let open = $state(false);
@@ -29,7 +31,8 @@
 	let input = $state<HTMLTextAreaElement | null>(null);
 	const busy = $derived(turns.some((turn) => turn.running));
 
-	// The page's ward and date frame the question unless it says otherwise.
+	// The page's filters frame the question unless it says otherwise: ward, date, specimen, the
+	// opened organism × antibiotic cell and, on the advisor, the patient profile.
 	let useContext = $state(true);
 	$effect(() => {
 		// A new page brings its own filters back.
@@ -38,25 +41,66 @@
 	});
 	const pageData = $derived(
 		page.data as {
-			input?: { ward?: string };
+			input?: {
+				ward?: string;
+				specimen?: string;
+				view?: string;
+				organism?: string;
+				site?: string;
+				sex?: string;
+				age?: string;
+			};
+			cell?: { organism: string; code: string } | null;
 			asOf?: string;
 			wards?: { code: string; nameFi: string; nameEn: string }[];
+			antibiotics?: { code: string; name: string; nameFi: string }[];
 		}
 	);
-	const context = $derived({
-		ward: pageData.input?.ward ?? page.url.searchParams.get('ward') ?? undefined,
-		asOf: pageData.asOf ?? page.url.searchParams.get('asOf') ?? undefined
+	const context = $derived.by(() => {
+		const input = pageData.input ?? {};
+		const params = page.url.searchParams;
+		const organism =
+			pageData.cell?.organism ?? (input.view === 'organism' ? input.organism : undefined);
+		const entries = {
+			ward: input.ward ?? params.get('ward') ?? undefined,
+			asOf: pageData.asOf ?? params.get('asOf') ?? undefined,
+			specimen: input.specimen,
+			organism,
+			antibiotic: pageData.cell?.code,
+			site: input.site,
+			sex: input.sex,
+			age: input.age
+		};
+		return Object.fromEntries(Object.entries(entries).filter(([, v]) => !!v)) as Record<
+			string,
+			string
+		>;
 	});
 	const contextLabel = $derived.by(() => {
+		const m = messages[locale];
 		const w = pageData.wards?.find((x) => x.code === context.ward);
-		const ward = w ? (locale === 'fi' ? w.nameFi : w.nameEn) : context.ward;
-		return [ward, context.asOf ? formatDate(locale, context.asOf) : null]
+		const ab = pageData.antibiotics?.find((x) => x.code === context.antibiotic);
+		const site = context.site
+			? m.pulse.empiricSites[
+					context.site === 'febrile-uti' ? 'febrile' : (context.site as 'cystitis')
+				]
+			: null;
+		return [
+			w ? (locale === 'fi' ? w.nameFi : w.nameEn) : context.ward,
+			context.specimen ? m.specimens[context.specimen as 'urine'] : null,
+			context.organism
+				? `${context.organism}${ab ? ` × ${locale === 'fi' ? ab.nameFi : ab.name}` : ''}`
+				: null,
+			site,
+			context.asOf ? formatDate(locale, context.asOf) : null
+		]
 			.filter(Boolean)
 			.join(' · ');
 	});
 
 	function apply(turn: Turn, event: AskEvent) {
 		if (event.type === 'status') turn.status = event.message;
+		else if (event.type === 'intent') turn.fromPage = event.fromContext;
 		else if (event.type === 'answer') turn.answer = event.answer;
 		else if (event.type === 'token') turn.text += event.text;
 		else if (event.type === 'check') turn.unsupported = event.unsupported;
@@ -85,7 +129,8 @@
 			unsupported: null,
 			errors: [],
 			model: null,
-			running: true
+			running: true,
+			fromPage: []
 		});
 		const turn = turns[turns.length - 1];
 		scrollDown();
@@ -156,7 +201,7 @@
 		aria-labelledby="ask-chat-title"
 		tabindex="-1"
 		onkeydown={onKeydown}
-		class="fixed right-4 bottom-20 z-50 flex h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+		class="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white sm:inset-auto sm:right-4 sm:bottom-20 sm:h-[min(620px,calc(100vh-7rem))] sm:w-[min(420px,calc(100vw-2rem))] sm:rounded-xl sm:border sm:border-slate-200 sm:shadow-xl"
 	>
 		<div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
 			<div>
@@ -230,6 +275,11 @@
 								{t.computed}
 							</p>
 							<p class="text-slate-700">{turn.answer.summary}</p>
+							{#if turn.fromPage.length}
+								<p class="mt-1.5 text-[11px] text-slate-500">
+									{t.fromPage(turn.fromPage.map((f) => t.fields[f as 'ward']).join(', '))}
+								</p>
+							{/if}
 							<a
 								href="{resolve(turn.answer.link.route)}?{turn.answer.link.query}#detail"
 								class="mt-2 flex items-center justify-between gap-2 rounded-md bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-100"
@@ -253,7 +303,7 @@
 			<div
 				class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
 			>
-				<span class="truncate">{t.context(contextLabel)}</span>
+				<span class="line-clamp-2">{t.context(contextLabel)}</span>
 				<button
 					type="button"
 					class="shrink-0 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-200"
@@ -262,7 +312,7 @@
 			</div>
 		{/if}
 		<form
-			class="flex items-end gap-2 border-t border-slate-200 p-3"
+			class="flex items-end gap-2 border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
 			onsubmit={(e) => {
 				e.preventDefault();
 				ask();
@@ -276,7 +326,8 @@
 				onkeydown={onInputKeydown}
 				rows="2"
 				placeholder={t.placeholder}
-				class="min-h-11 flex-1 resize-none rounded-md border-slate-300 text-sm"></textarea>
+				class="min-h-11 flex-1 resize-none rounded-md border-slate-300 text-base sm:text-sm"
+			></textarea>
 			<button
 				class="min-h-11 rounded-md bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
 				disabled={!question.trim() || busy}>{t.send}</button
@@ -289,7 +340,11 @@
 	type="button"
 	aria-expanded={open}
 	onclick={toggle}
-	class="fixed right-4 bottom-4 z-50 flex min-h-12 items-center gap-2 rounded-full bg-teal-700 px-5 text-sm font-semibold text-white shadow-lg hover:bg-teal-800"
+	class={[
+		'fixed right-4 bottom-4 z-50 min-h-12 items-center gap-2 rounded-full bg-teal-700 px-5 text-sm font-semibold text-white shadow-lg hover:bg-teal-800',
+		// On phones the open chat is full screen and has its own close button.
+		open ? 'hidden sm:flex' : 'flex'
+	]}
 >
 	<svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"
 		><path

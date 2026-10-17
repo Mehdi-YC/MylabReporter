@@ -388,6 +388,51 @@ describe('ask', () => {
 		expect(bad.find((e) => e.type === 'intent')).toMatchObject({ fromContext: [] });
 	});
 
+	test('the page filters and opened cell fill what the question leaves open', async () => {
+		const cell = {
+			ward: 'URO',
+			asOf: '2026-05-31',
+			specimen: 'urine',
+			organism: 'Escherichia coli',
+			antibiotic: 'CRO'
+		};
+		const events = await collect(ask('How is resistance evolving?', data, null, cell));
+		expect(events.find((e) => e.type === 'intent')).toMatchObject({
+			intent: {
+				type: 'resistance',
+				ward: 'URO',
+				specimen: 'urine',
+				organism: 'Escherichia coli',
+				antibiotic: 'CRO'
+			},
+			fromContext: ['ward', 'asOf', 'specimen', 'organism', 'antibiotic']
+		});
+		// Another organism named: the cell's drug is not carried over to it.
+		const other = await collect(ask('How is Klebsiella pneumoniae doing?', data, null, cell));
+		const otherIntent = other.find((e) => e.type === 'intent');
+		expect(otherIntent).toMatchObject({ intent: { organism: 'Klebsiella pneumoniae' } });
+		expect(otherIntent && 'intent' in otherIntent && otherIntent.intent.antibiotic).toBeFalsy();
+		// An alerts question only takes the ward and date.
+		const alerts = await collect(ask('Any alerts?', data, null, cell));
+		expect(alerts.find((e) => e.type === 'intent')).toMatchObject({
+			intent: { type: 'alerts' },
+			fromContext: ['ward', 'asOf']
+		});
+		// The advisor's patient profile frames a therapy question; bad values are ignored.
+		const therapy = await collect(
+			ask('What should I give?', data, null, {
+				ward: 'URO',
+				site: 'cystitis',
+				sex: 'M',
+				age: 'nope'
+			})
+		);
+		expect(therapy.find((e) => e.type === 'intent')).toMatchObject({
+			intent: { type: 'therapy', site: 'cystitis', sex: 'M' },
+			fromContext: ['ward', 'site', 'sex']
+		});
+	});
+
 	test('model down: clear error, keyword intent and the computed answer still delivered', async () => {
 		const provider = new MockProvider('mistral', true, { fail: true });
 		const events = await collect(ask('How is E. coli doing in Urology?', data, provider));

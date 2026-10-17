@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { alertReasons, alertTitle } from '#lib/alertText.ts';
 	import { askAei } from '#lib/askBus.ts';
-	import { formatPercent, formatRange, messages } from '#lib/i18n.ts';
+	import { formatDate, formatPercent, formatRange, messages } from '#lib/i18n.ts';
 	import type { Proportion } from '#lib/amr/stats.ts';
 	import type { PageProps } from './$types';
 
@@ -21,15 +21,21 @@
 		return a ? (fi ? a.nameFi : a.name) : code;
 	};
 	const w4 = $derived(data.input.window === '4w');
-	const submit = (e: Event) =>
+	const latest = $derived(data.asOf === data.range.last);
+	/** "Escherichia coli" → "E. coli", for the narrow first column on phones. */
+	const shortName = (organism: string) => organism.replace(/^(\p{L})\p{L}+ /u, '$1. ');
+	let dateOpen = $state(false);
+	const submit = (e: Event) => {
+		dateOpen = false;
 		(e.currentTarget as HTMLSelectElement | HTMLInputElement).form?.requestSubmit();
+	};
 
 	/** Current selection plus overrides, as a query string for links. */
 	function q(over: Record<string, string | null> = {}): string {
 		const base: Record<string, string | null> = {
 			ward: data.input.ward,
 			specimen: data.input.specimen,
-			window: data.input.window,
+			window: data.input.windowAuto ? null : data.input.window,
 			view: data.input.view,
 			organism: data.input.view === 'organism' ? data.input.organism : null,
 			asOf: data.asOf,
@@ -49,14 +55,28 @@
 		return 'bg-white text-slate-900';
 	};
 
-	// 24-month chart (viewBox 600 × 170): this ward and all wards.
+	// 24-month chart (600 wide, plus room for a 3-month projection): this ward and all wards.
 	const chartMax = $derived(
 		Math.max(
-			20,
+			30,
 			...(data.cell?.ward.map((p) => p.r ?? 0) ?? []),
-			...(data.cell?.hospital.map((p) => p.r ?? 0) ?? [])
+			...(data.cell?.hospital.map((p) => p.r ?? 0) ?? []),
+			data.cell?.outlook?.projected ?? 0
 		)
 	);
+	const chartWidth = $derived(600 + (3 * 600) / Math.max(1, (data.cell?.ward.length ?? 2) - 1));
+	// Fitted line over the complete months and its projection (the outlook leaves the current,
+	// partial month out, so its last fitted point is the month before).
+	const fit = $derived.by(() => {
+		const c = data.cell;
+		const o = c?.outlook;
+		if (!c || !o || o.trend === 'stable') return null;
+		const n = c.ward.length;
+		const last = n - 2;
+		const at = (j: number) => Math.min(100, Math.max(0, o.current + o.slope * (j - last)));
+		const pt = (j: number) => `${cx(j, n).toFixed(1)},${cy(at(j)).toFixed(1)}`;
+		return { past: `${pt(0)} ${pt(last)}`, ahead: `${pt(last)} ${pt(last + o.horizon)}` };
+	});
 	const cx = (i: number, n: number) => (i * 600) / Math.max(1, n - 1);
 	const cy = (v: number) => 150 - (v / chartMax) * 130;
 	const line = (points: { r: number | null }[]) =>
@@ -84,87 +104,117 @@
 
 <form
 	method="GET"
-	class="sticky top-0 z-30 -mx-4 -mt-6 mb-6 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8"
+	class="-mx-4 -mt-6 mb-6 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:sticky sm:top-0 sm:z-30 sm:-mx-8 sm:px-8"
 >
+	<!-- Three plain choices: which ward, which specimen, and (rarely) an earlier date. -->
 	<input type="hidden" name="view" value={data.input.view} />
+	{#if !data.input.windowAuto}<input type="hidden" name="window" value={data.input.window} />{/if}
 	{#if data.input.view === 'organism'}<input
 			type="hidden"
 			name="organism"
 			value={data.input.organism}
 		/>{/if}
-	<div class="flex flex-wrap items-end gap-4">
-		<label class="flex flex-col gap-1 text-xs font-medium text-slate-500">
-			{t.ward}
-			<select
-				name="ward"
-				class="min-h-10 rounded-md border-slate-300 text-sm text-slate-900"
-				onchange={submit}
-			>
-				{#each data.wards as w (w.code)}
-					<option value={w.code} selected={data.input.ward === w.code}
-						>{fi ? w.nameFi : w.nameEn} ({w.code})</option
-					>
-				{/each}
-			</select>
-		</label>
-		<label class="flex flex-col gap-1 text-xs font-medium text-slate-500">
-			{t.specimen}
-			<select
-				name="specimen"
-				class="min-h-10 rounded-md border-slate-300 text-sm text-slate-900"
-				onchange={submit}
-			>
-				{#each ['urine', 'blood', 'wound'] as const as s (s)}
-					<option value={s} selected={data.input.specimen === s}>{t.specimens[s]}</option>
-				{/each}
-			</select>
-		</label>
-		<fieldset class="flex flex-col gap-1">
-			<legend class="mb-1 text-xs font-medium text-slate-500">{t.window}</legend>
+	<div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+		<label class="sr-only" for="ward-filter">{t.ward}</label>
+		<select
+			id="ward-filter"
+			name="ward"
+			class="min-h-11 w-full min-w-0 rounded-md border-slate-300 text-base font-semibold text-slate-900 sm:w-auto sm:text-[15px]"
+			onchange={submit}
+		>
+			{#each data.wards as w (w.code)}
+				<option value={w.code} selected={data.input.ward === w.code}
+					>{fi ? w.nameFi : w.nameEn} ({w.code})</option
+				>
+			{/each}
+		</select>
+		<fieldset class="min-w-0">
+			<legend class="sr-only">{t.specimen}</legend>
 			<div class="flex rounded-lg bg-slate-100 p-0.5">
-				{#each [['4w', t.w4], ['12m', t.w12]] as [value, label] (value)}
+				{#each ['urine', 'blood', 'wound'] as const as s (s)}
 					<label
 						class={[
-							'flex min-h-9 cursor-pointer items-center rounded-md px-3 text-sm font-medium',
-							data.input.window === value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+							'flex min-h-10 cursor-pointer items-center rounded-md px-3 text-sm font-medium has-focus-visible:ring-2 has-focus-visible:ring-teal-600',
+							data.input.specimen === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
 						]}
 					>
 						<input
 							type="radio"
-							name="window"
-							{value}
-							checked={data.input.window === value}
+							name="specimen"
+							value={s}
+							checked={data.input.specimen === s}
 							class="sr-only"
 							onchange={submit}
-						/>{label}
+						/>{t.specimens[s]}
 					</label>
 				{/each}
 			</div>
 		</fieldset>
-		<label class="flex flex-col gap-1 text-xs font-medium text-slate-500">
-			{t.asOf}
-			<input
-				type="date"
-				name="asOf"
-				value={data.asOf}
-				min={data.range.first}
-				max={data.range.last}
-				class="min-h-10 rounded-md border-slate-300 text-sm text-slate-900"
-				onchange={submit}
-			/>
-		</label>
+		<details class="relative" bind:open={dateOpen}>
+			<summary
+				class={[
+					'flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-md border px-3 text-sm font-medium [&::-webkit-details-marker]:hidden',
+					latest
+						? 'border-slate-300 bg-white text-slate-700'
+						: 'border-amber-300 bg-amber-50 text-amber-900'
+				]}
+			>
+				<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"
+					><rect
+						x="2"
+						y="3"
+						width="12"
+						height="11"
+						rx="1.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.4"
+					/><path
+						d="M2 6.5 H14 M5 1.5 V4 M11 1.5 V4"
+						stroke="currentColor"
+						stroke-width="1.4"
+					/></svg
+				>
+				{latest ? t.filters.latest : t.filters.viewing(formatDate(data.locale, data.asOf))}
+				<span aria-hidden="true" class="text-xs">▾</span>
+			</summary>
+			<div
+				class="absolute left-0 z-40 mt-2 flex w-[min(18rem,calc(100vw-2rem))] flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-lg"
+			>
+				<label class="flex flex-col gap-1 text-xs font-medium text-slate-500">
+					{t.filters.dateHelp}
+					<input
+						type="date"
+						name="asOf"
+						value={data.asOf}
+						min={data.range.first}
+						max={data.range.last}
+						class="min-h-10 rounded-md border-slate-300 text-base text-slate-900 sm:text-sm"
+						onchange={submit}
+					/>
+				</label>
+				{#if !latest}
+					<a
+						href="{resolve('/')}?{q({ asOf: null })}"
+						class="text-sm font-semibold text-teal-700 hover:underline"
+						>{t.filters.backToLatest} →</a
+					>
+				{/if}
+			</div>
+		</details>
 		<noscript
 			><button class="min-h-10 rounded-md bg-teal-700 px-4 text-sm font-semibold text-white"
 				>{t.update}</button
 			></noscript
 		>
-		<div class="flex-1"></div>
+		<div class="hidden flex-1 sm:block"></div>
 		<a
 			href="{resolve('/station')}?{new URLSearchParams({
 				ward: data.input.ward,
 				asOf: data.asOf
 			}).toString()}"
-			class="text-sm font-medium text-teal-700 hover:underline">{t.nav.station} →</a
+			class="hidden text-sm font-medium text-teal-700 hover:underline sm:inline"
+			>{t.nav.station} →</a
 		>
 	</div>
 </form>
@@ -316,6 +366,33 @@
 			{:else}
 				<p class="text-sm text-slate-600">{t.pulse.noChanges}</p>
 			{/each}
+			{#if data.early.length}
+				<h3
+					class="mt-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-amber-800 uppercase"
+				>
+					<span aria-hidden="true">↗</span>{t.forecast.changesTitle}
+				</h3>
+				{#each data.early as e (e.organism + e.code)}
+					<a
+						href="{resolve('/')}?{q({
+							view: 'ward',
+							organism: null,
+							cellOrg: e.organism,
+							cellAb: e.code
+						})}#detail"
+						class="rounded-md py-1 hover:bg-slate-50"
+					>
+						<span class="block text-sm text-slate-600 italic">{e.organism}</span>
+						<span class="block text-sm font-semibold"
+							>{t.forecast.line(abName(e.code), pct(e.current), String(e.slope))}</span
+						>
+						{#if e.warning && e.monthsToThreshold !== null}<span
+								class="block text-xs text-amber-800"
+								>{t.forecast.reach(t.forecast.months(e.monthsToThreshold))}</span
+							>{/if}
+					</a>
+				{/each}
+			{/if}
 		</section>
 	</div>
 
@@ -325,9 +402,25 @@
 				{data.input.view === 'organism'
 					? t.pulse.tableByOrganism(data.input.organism)
 					: t.pulse.tableByWard(wardName(data.input.ward))}
-				<span class="ml-1 text-sm font-normal text-slate-500">· {w4 ? t.w4 : t.w12}</span>
+				<span class="ml-1 text-sm font-normal text-slate-500">· {w4 ? t.w4 : t.w12}</span
+				>{#if data.input.windowAuto && !w4}<span class="ml-1 text-sm font-normal text-slate-500"
+						>({t.filters.autoWindow})</span
+					>{/if}
 			</h2>
 			<div class="flex flex-wrap items-center gap-3">
+				<nav aria-label={t.window} class="flex rounded-lg bg-slate-100 p-0.5 text-sm font-medium">
+					{#each [['4w', t.w4], ['12m', t.w12]] as [value, label] (value)}
+						<a
+							href="{resolve('/')}?{q({ window: value })}"
+							aria-current={data.input.window === value ? 'true' : undefined}
+							data-sveltekit-reset="false"
+							class={[
+								'flex min-h-9 items-center rounded-md px-3',
+								data.input.window === value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+							]}>{label}</a
+						>
+					{/each}
+				</nav>
 				{#if data.input.view === 'organism'}
 					<form method="GET" class="flex items-center gap-2">
 						{#each Object.entries( { ward: data.input.ward, specimen: data.input.specimen, window: data.input.window, view: 'organism', asOf: data.asOf } ) as [name, value] (name)}
@@ -378,7 +471,9 @@
 					<table class="w-full min-w-[760px] border-collapse text-sm">
 						<thead>
 							<tr class="border-b border-slate-200 text-xs text-slate-500">
-								<th class="px-3 py-2.5 text-left font-medium">{t.organism}</th>
+								<th class="sticky left-0 z-10 bg-white px-3 py-2.5 text-left font-medium">
+									{t.organism}
+								</th>
 								<th class="px-3 py-2.5 text-right font-medium">n</th>
 								{#each data.table.antibiotics as code (code)}
 									<th class="px-2 py-2.5 text-right font-medium" title={abName(code)}>
@@ -394,11 +489,12 @@
 								<tr class="border-b border-slate-100 last:border-0">
 									<th
 										scope="row"
-										class="px-3 py-3 text-left align-top font-medium whitespace-nowrap italic"
+										class="sticky left-0 z-10 bg-white px-3 py-3 text-left align-top font-medium whitespace-nowrap italic shadow-[1px_0_0_#E2E8F0]"
 									>
-										{row.organism}
+										<span class="sm:hidden" title={row.organism}>{shortName(row.organism)}</span
+										><span class="hidden sm:inline">{row.organism}</span>
 										{#if lowN}<span
-												class="mt-0.5 block text-[11px] font-normal text-amber-800 not-italic"
+												class="mt-0.5 block max-w-[7rem] text-[11px] font-normal whitespace-normal text-amber-800 not-italic sm:max-w-none"
 												>{t.insufficient}</span
 											>{/if}
 									</th>
@@ -411,8 +507,14 @@
 										{@const other = w4 ? cell.annual : cell.recent}
 										{@const on =
 											data.cell?.organism === row.organism && data.cell?.code === cell.code}
+										{@const o = data.outlook[row.organism]?.[cell.code]}
+										{@const drift = !!o && o.trend === 'rising' && !cell.rise}
 										<td
-											class={['p-0 text-right align-top', cell.rise && w4 && !lowN && 'bg-rose-50']}
+											class={[
+												'p-0 text-right align-top',
+												cell.rise && w4 && !lowN && 'bg-rose-50',
+												drift && o.warning && 'bg-amber-50'
+											]}
 										>
 											{#if cell.annual.n === 0 && cell.recent.n === 0}
 												<span class="block px-2 py-3 text-slate-400" title={t.notTested}>–</span>
@@ -435,7 +537,14 @@
 																: cell.rise
 																	? 'text-rose-700'
 																	: 'text-slate-900'
-														]}>{lowN || main.n === 0 ? '—' : pct(main.r)}</span
+														]}
+														>{lowN || main.n === 0 ? '—' : pct(main.r)}{#if drift}<span
+																class="ml-0.5 text-amber-700"
+																title="{t.forecast.badge}: +{o.slope} / {fi ? 'kk' : 'month'}"
+																><span aria-hidden="true">↗</span><span class="sr-only"
+																	>{t.forecast.badge}</span
+																></span
+															>{/if}</span
 													>
 													<span class="block text-[11px] text-slate-500 tabular-nums"
 														>{lowN ? pct(cell.annual.r) : other.n ? pct(other.r) : '–'}</span
@@ -449,7 +558,10 @@
 						</tbody>
 					</table>
 				</div>
-				<p class="mt-2 text-xs text-slate-500">{t.pulse.tableHint}. {t.pulse.legend}</p>
+				<p class="mt-2 text-xs text-slate-500">
+					{t.pulse.tableHint}. {t.pulse.legend}
+					<span class="text-amber-800">{t.forecast.legend}.</span>
+				</p>
 			{:else}
 				<p class="rounded-lg border border-slate-200 bg-white p-6 text-slate-500">
 					{t.pulse.noData}
@@ -565,14 +677,21 @@
 			<div class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
 				<div>
 					<svg
-						viewBox="0 0 600 170"
+						viewBox="0 0 {chartWidth.toFixed(0)} 170"
 						class="block h-auto w-full"
 						role="img"
 						aria-label={t.pulse.trend24}
 					>
-						<line x1="0" y1="150" x2="600" y2="150" stroke="#DCE3E5" />
-						<line x1="0" y1={cy(25)} x2="600" y2={cy(25)} stroke="#EEF2F2" />
-						<text x="0" y={cy(25) - 4} font-size="10" fill="#8A979E">{pct(25)}</text>
+						<line x1="0" y1="150" x2={chartWidth} y2="150" stroke="#DCE3E5" />
+						<line
+							x1="0"
+							y1={cy(20)}
+							x2={chartWidth}
+							y2={cy(20)}
+							stroke="#E8C98A"
+							stroke-dasharray="2 3"
+						/>
+						<text x="0" y={cy(20) - 4} font-size="10" fill="#8A6A1F">{t.forecast.threshold}</text>
 						<polyline
 							points={line(c.hospital)}
 							fill="none"
@@ -581,6 +700,25 @@
 							stroke-dasharray="4 4"
 						/>
 						<polyline points={line(c.ward)} fill="none" stroke="#0A6464" stroke-width="2.2" />
+						{#if fit}
+							<polyline
+								points={fit.past}
+								fill="none"
+								stroke="#B7791F"
+								stroke-width="1.2"
+								opacity=".6"
+							/>
+							<polyline
+								points={fit.ahead}
+								fill="none"
+								stroke="#B7791F"
+								stroke-width="2"
+								stroke-dasharray="5 4"
+							/>
+							<text x={chartWidth} y="12" text-anchor="end" font-size="10" fill="#8A6A1F"
+								>{t.forecast.projection} →</text
+							>
+						{/if}
 						<text x="0" y="166" font-size="10" fill="#5E6E78">{monthLabel(c.ward[0].month)}</text>
 						<text x="600" y="166" text-anchor="end" font-size="10" fill="#5E6E78"
 							>{monthLabel(c.ward[c.ward.length - 1].month)}</text
@@ -637,6 +775,35 @@
 							{/if}
 						</div>
 					{/each}
+					{#if c.outlook}
+						{@const o = c.outlook}
+						<div
+							class={[
+								'rounded-lg px-3 py-2.5 text-sm',
+								o.trend === 'rising' ? 'bg-amber-50 text-amber-900' : 'bg-slate-50 text-slate-700'
+							]}
+						>
+							<p class="text-xs font-semibold tracking-wide uppercase opacity-80">
+								{t.forecast.title}
+							</p>
+							{#if o.trend === 'stable'}
+								<p class="mt-1">{t.forecast.stable}</p>
+							{:else}
+								<p class="mt-1 font-semibold">
+									{o.trend === 'rising'
+										? t.forecast.rising(String(o.slope))
+										: t.forecast.falling(String(o.slope))}
+								</p>
+								{#if o.monthsToThreshold !== null}
+									<p class="mt-1">{t.forecast.reach(t.forecast.months(o.monthsToThreshold))}</p>
+								{:else if o.trend === 'rising' && o.current >= o.threshold}
+									<p class="mt-1">{t.forecast.above}</p>
+								{/if}
+								<p class="mt-1 text-xs">{t.forecast.expected(o.horizon, pct(o.projected))}</p>
+							{/if}
+							<p class="mt-1.5 text-[11px] opacity-70">{t.forecast.method}</p>
+						</div>
+					{/if}
 					<p class="text-xs text-slate-500">{t.explorer.method}</p>
 				</div>
 			</div>

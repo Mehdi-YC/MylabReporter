@@ -113,20 +113,24 @@
 					</svg>
 					<span class="flex flex-col leading-tight">
 						<span class="text-base font-bold tracking-wide">AEI</span>
-						<span class="text-xs text-slate-500"
+						<span class="hidden text-xs text-slate-500 sm:inline"
 							>{t.product}
 							<span class="ml-1 text-[10px] tracking-[0.08em] text-slate-400">{t.partner}</span
 							></span
 						>
 					</span>
 				</a>
-				<nav aria-label={t.nav.label} class="flex flex-wrap gap-1 text-sm">
+				<!-- Phones: the navigation is its own scrollable row under the logo. -->
+				<nav
+					aria-label={t.nav.label}
+					class="order-last -mx-4 flex w-[calc(100%+2rem)] [scrollbar-width:none] gap-1 overflow-x-auto px-4 text-sm whitespace-nowrap md:order-none md:mx-0 md:w-auto md:overflow-visible md:px-0"
+				>
 					{#each nav as item (item.route)}
 						<a
 							href="{item.href}{asOfSuffix}"
 							aria-current={page.route.id === item.route ? 'page' : undefined}
 							class={[
-								'rounded-md px-2.5 py-1.5 font-medium transition',
+								'shrink-0 rounded-md px-2.5 py-2 font-medium transition md:py-1.5',
 								page.route.id === item.route
 									? 'bg-teal-50 text-teal-800'
 									: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -143,14 +147,18 @@
 				<div class="flex-1"></div>
 				<a
 					href={resolve('/status')}
-					class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
-					title={t.nav.status}
+					class="flex min-h-8 items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
+					title="{t.nav.status} · {t.lastSync} {formatDateTime(
+						data.locale,
+						new Date(data.sync.loadedAt)
+					)}"
 				>
 					<span class="size-2 rounded-full bg-emerald-500"></span>
-					{t.lastSync}
-					<span class="font-mono text-xs text-slate-900"
+					<span class="hidden lg:inline">{t.lastSync}</span>
+					<span class="hidden font-mono text-xs text-slate-900 lg:inline"
 						>{formatDateTime(data.locale, new Date(data.sync.loadedAt))}</span
 					>
+					<span class="sr-only lg:hidden">{t.nav.status}</span>
 					<span class="hidden text-xs text-slate-500 2xl:inline"
 						>· {t.dataUntil} {formatDate(data.locale, data.sync.lastDate)}</span
 					>
@@ -175,7 +183,9 @@
 							stroke="currentColor"
 							stroke-width="1.4"
 						/></svg
-					>{t.admin.nav}</a
+					><span class="hidden sm:inline">{t.admin.nav}</span><span class="sr-only sm:hidden"
+						>{t.admin.nav}</span
+					></a
 				>
 				{@render languageToggle()}
 			</div>

@@ -19,6 +19,14 @@
 	// Centre of the selected week's column, as a share of the timeline width.
 	const weekPosition = $derived((weekIndex + 0.5) / data.timeline.length);
 
+	let timeline = $state<HTMLDivElement | null>(null);
+	$effect(() => {
+		// Keep the selected week in view when the timeline is wider than the screen.
+		const el = timeline;
+		if (!el || el.scrollWidth <= el.clientWidth) return;
+		el.scrollTo({ left: weekPosition * el.scrollWidth - el.clientWidth / 2 });
+	});
+
 	let playing = $state(false);
 
 	function show(asOf: string) {
@@ -132,55 +140,61 @@
 				</div>
 			{/each}
 		</div>
-		<div class="relative min-w-0 flex-1 pt-8">
-			<!-- The selected week: a band over its column and the date above it. -->
-			<span
-				class={[
-					'absolute top-0 rounded-md bg-teal-700 px-2 py-1 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm',
-					weekPosition < 0.12
-						? '-translate-x-2'
-						: weekPosition > 0.88
-							? '-translate-x-full'
-							: '-translate-x-1/2'
-				]}
-				style:left="{weekPosition * 100}%"
-				aria-live="polite">{t.alerts.selectedWeek(formatDate(data.locale, data.asOf))}</span
-			>
-			<div
-				class="pointer-events-none absolute top-6 bottom-5 rounded-[3px] bg-teal-500/15 ring-2 ring-teal-700"
-				style:left="calc({(weekIndex / data.timeline.length) * 100}% - 2px)"
-				style:width="calc({100 / data.timeline.length}% + 3px)"
-			></div>
-			<div class="flex flex-col gap-0.5">
-				{#each data.wards as ward (ward.code)}
-					<div
-						class="grid gap-px"
-						style:grid-template-columns="repeat({data.timeline.length}, minmax(0, 1fr))"
-					>
-						{#each data.timeline as week, i (week.asOf)}
-							{@const status = week.wards[ward.code]}
-							<a
-								href={resolve(`/alerts?asOf=${week.asOf}`)}
-								data-sveltekit-reset="false"
-								title="{ward.code} · {t.alerts.weekEnding} {formatDate(
-									data.locale,
-									week.asOf
-								)}{status ? ` · ${status}` : ''}"
-								class={['h-4 rounded-[2px]', LEVEL_CELL[status ?? 'none']]}
-								aria-current={i === weekIndex ? 'date' : undefined}
-								aria-label="{ward.code}, {t.alerts.weekEnding} {formatDate(data.locale, week.asOf)}"
-							></a>
-						{/each}
-					</div>
-				{/each}
-			</div>
-			<div class="relative h-5">
-				{#each yearMarks as mark (mark.i)}
-					<span
-						class="absolute top-1 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-400"
-						style:left="{(mark.i / data.timeline.length) * 100}%">{mark.label}</span
-					>
-				{/each}
+		<!-- Phones: the timeline scrolls sideways (kept on the selected week), the wards stay put. -->
+		<div bind:this={timeline} class="min-w-0 flex-1 overflow-x-auto pb-1">
+			<div class="relative min-w-[720px] pt-8 md:min-w-0">
+				<!-- The selected week: a band over its column and the date above it. -->
+				<span
+					class={[
+						'absolute top-0 rounded-md bg-teal-700 px-2 py-1 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm',
+						weekPosition < 0.12
+							? '-translate-x-2'
+							: weekPosition > 0.88
+								? '-translate-x-full'
+								: '-translate-x-1/2'
+					]}
+					style:left="{weekPosition * 100}%"
+					aria-live="polite">{t.alerts.selectedWeek(formatDate(data.locale, data.asOf))}</span
+				>
+				<div
+					class="pointer-events-none absolute top-6 bottom-5 rounded-[3px] bg-teal-500/15 ring-2 ring-teal-700"
+					style:left="calc({(weekIndex / data.timeline.length) * 100}% - 2px)"
+					style:width="calc({100 / data.timeline.length}% + 3px)"
+				></div>
+				<div class="flex flex-col gap-0.5">
+					{#each data.wards as ward (ward.code)}
+						<div
+							class="grid gap-px"
+							style:grid-template-columns="repeat({data.timeline.length}, minmax(0, 1fr))"
+						>
+							{#each data.timeline as week, i (week.asOf)}
+								{@const status = week.wards[ward.code]}
+								<a
+									href={resolve(`/alerts?asOf=${week.asOf}`)}
+									data-sveltekit-reset="false"
+									title="{ward.code} · {t.alerts.weekEnding} {formatDate(
+										data.locale,
+										week.asOf
+									)}{status ? ` · ${status}` : ''}"
+									class={['h-4 rounded-[2px]', LEVEL_CELL[status ?? 'none']]}
+									aria-current={i === weekIndex ? 'date' : undefined}
+									aria-label="{ward.code}, {t.alerts.weekEnding} {formatDate(
+										data.locale,
+										week.asOf
+									)}"
+								></a>
+							{/each}
+						</div>
+					{/each}
+				</div>
+				<div class="relative h-5">
+					{#each yearMarks as mark (mark.i)}
+						<span
+							class="absolute top-1 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-400"
+							style:left="{(mark.i / data.timeline.length) * 100}%">{mark.label}</span
+						>
+					{/each}
+				</div>
 			</div>
 		</div>
 	</div>

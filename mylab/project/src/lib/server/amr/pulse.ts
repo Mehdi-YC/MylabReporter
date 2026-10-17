@@ -15,6 +15,7 @@ import {
 import { surveillanceWindows } from '#lib/amr/dates.ts';
 import { firstIsolates } from '#lib/amr/firstIsolate.ts';
 import { pulseTable, weeklyCounts } from '#lib/amr/pulse.ts';
+import { monthlyResistance, resistanceOutlook, type Outlook } from '#lib/amr/forecast.ts';
 import { explorerMatrix } from '#lib/amr/explorer.ts';
 import { proportion } from '#lib/amr/stats.ts';
 import { PHENOTYPES, type Specimen } from '#lib/amr/types.ts';
@@ -71,11 +72,19 @@ export async function loadWardPulse(url: URL, cookies: Cookies) {
 	const specimen = SPECIMENS.includes(q.get('specimen') as Specimen)
 		? (q.get('specimen') as Specimen)
 		: commonest;
-	const window = q.get('window') === '12m' ? '12m' : '4w';
 	const view = q.get('view') === 'organism' ? 'organism' : 'ward';
 
 	const filter: IsolateFilter = { ward, specimen };
 	const table = pulseTable(data.isolates, data.antibiotics, filter, windows);
+	// Window: the user's choice, else 4 weeks when the main organism has enough isolates for it
+	// (n ≥ 30), else 12 months, so the table is not a wall of "too few isolates".
+	const requestedWindow = q.get('window');
+	const window: '4w' | '12m' =
+		requestedWindow === '4w' || requestedWindow === '12m'
+			? requestedWindow
+			: (table.rows[0]?.recentIsolates ?? 0) >= 30
+				? '4w'
+				: '12m';
 	const recent = selectIsolates(data.isolates, filter, windows.recent);
 	const annual = selectIsolates(data.isolates, filter, windows.annual);
 	const wardAlerts = alerts.filter((a) => a.ward === ward);
@@ -158,6 +167,32 @@ export async function loadWardPulse(url: URL, cookies: Cookies) {
 	});
 	const warned = Object.keys(warnings).filter((code) => options.some((o) => o.code === code));
 
+	// Early warning: slow month-on-month drifts over the 24 complete months before this one, per
+	// cell of the table (the current month is left out, so an acute cluster does not pose as a
+	// drift). Cells that already show an acute rise are left to the rise itself.
+	const drift = (f: IsolateFilter, codes: string[]) => {
+		const counts = monthlyResistance(data.isolates, f, codes, asOf, 25);
+		return (code: string) => resistanceOutlook(counts[code].slice(0, -1));
+	};
+	const outlook: Record<string, Record<string, Outlook>> = {};
+	for (const row of table.rows) {
+		const codes = row.cells.filter((c) => c.annual.n > 0).map((c) => c.code);
+		const of = drift({ ...filter, organism: row.organism }, codes);
+		for (const code of codes) {
+			const o = of(code);
+			if (o) (outlook[row.organism] ??= {})[code] = o;
+		}
+	}
+	// Slowly rising cells, those about to cross 20 % first, then the steepest.
+	const early = table.rows
+		.flatMap((row) =>
+			row.cells
+				.filter((c) => !c.rise && outlook[row.organism]?.[c.code]?.trend === 'rising')
+				.map((c) => ({ organism: row.organism, code: c.code, ...outlook[row.organism][c.code] }))
+		)
+		.sort((a, b) => Number(b.warning) - Number(a.warning) || b.slope - a.slope)
+		.slice(0, 3);
+
 	// What has changed: the significant rises of the ward, largest first, in plain sentences.
 	const changes = table.rows
 		.flatMap((row) =>
@@ -218,6 +253,7 @@ export async function loadWardPulse(url: URL, cookies: Cookies) {
 						recent: resistantShare(selectIsolates(data.isolates, f, windows.recent), cellAb),
 						annual: resistantShare(selectIsolates(data.isolates, f, windows.annual), cellAb),
 						ward: toR(monthlyTrend(data.isolates, f, cellAb, asOf, 24)),
+						outlook: drift(f, [cellAb])(cellAb),
 						hospital: toR(monthlyTrend(data.isolates, { ...f, ward: undefined }, cellAb, asOf, 24))
 					};
 				})()
@@ -228,9 +264,11 @@ export async function loadWardPulse(url: URL, cookies: Cookies) {
 		asOf,
 		range: { first: data.firstDate, last: data.lastDate },
 		windows,
-		input: { ward, specimen, window, view, organism },
+		input: { ward, specimen, window, windowAuto: !requestedWindow, view, organism },
 		organisms: data.organisms,
 		changes,
+		outlook,
+		early,
 		byOrganism: byOrganism ? { codes: organismCodes, rows: byOrganism } : null,
 		cell,
 		wards: data.wards,
