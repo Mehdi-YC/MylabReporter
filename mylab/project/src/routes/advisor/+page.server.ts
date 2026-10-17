@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { getDataset } from '#lib/server/amr/dataset.ts';
+import { rememberedWard, rememberWard } from '#lib/server/ward.ts';
 import { selectIsolates, type IsolateFilter } from '#lib/amr/antibiogram.ts';
 import { detectAnomalies } from '#lib/amr/anomalies.ts';
 import {
@@ -22,7 +23,7 @@ import type { Sex } from '#lib/amr/types.ts';
 
 const TARGETS = [0.7, 0.8, 0.9];
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, cookies }) => {
 	const data = await getDataset();
 	const q = url.searchParams;
 	const pick = <T extends string>(key: string, allowed: readonly T[]) => {
@@ -30,11 +31,10 @@ export const load: PageServerLoad = async ({ url }) => {
 		return allowed.includes(v as T) ? (v as T) : undefined;
 	};
 
-	const ward =
-		pick(
-			'ward',
-			data.wards.map((w) => w.code)
-		) ?? 'ED';
+	const wardCodes = data.wards.map((w) => w.code);
+	const requestedWard = pick('ward', wardCodes);
+	if (requestedWard) rememberWard(cookies, requestedWard);
+	const ward = requestedWard ?? rememberedWard(cookies, wardCodes) ?? 'ED';
 	const site = pick('site', Object.keys(SITES) as Site[]) ?? 'cystitis';
 	const specimen = SITES[site].specimen;
 	const sex = pick('sex', ['F', 'M'] as Sex[]);

@@ -11,6 +11,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body = (await request.json().catch(() => null)) as {
 		question?: unknown;
 		useModel?: unknown;
+		context?: { ward?: unknown; asOf?: unknown };
 	} | null;
 	const question = typeof body?.question === 'string' ? body.question.trim().slice(0, 500) : '';
 	if (!question) error(400, 'Missing question');
@@ -36,7 +37,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			};
 			try {
 				if (setupError) send({ type: 'error', message: setupError });
-				for await (const event of ask(question, data, provider)) send(event);
+				const context = {
+					ward: typeof body?.context?.ward === 'string' ? body.context.ward : undefined,
+					asOf: typeof body?.context?.asOf === 'string' ? body.context.asOf : undefined
+				};
+				for await (const event of ask(question, data, provider, context)) send(event);
 				remember(data.version, question, events);
 			} catch (e) {
 				send({ type: 'error', message: e instanceof Error ? e.message : String(e) });

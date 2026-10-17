@@ -1,4 +1,6 @@
+import type { Cookies } from '@sveltejs/kit';
 import { getDataset } from '#lib/server/amr/dataset.ts';
+import { rememberedWard, rememberWard } from '#lib/server/ward.ts';
 import { getAlerts } from '#lib/server/amr/alerts.ts';
 import { monthlyTrend, selectIsolates, type IsolateFilter } from '#lib/amr/antibiogram.ts';
 import { wardLevels, type Alert } from '#lib/amr/anomalies.ts';
@@ -36,7 +38,7 @@ const byPriority = (a: Alert, b: Alert) =>
 	RANK[a.severity] - RANK[b.severity] || a.pValue - b.pValue;
 
 /** Everything the Ward Pulse and the ward-station view show for one ward (query: ward, specimen, window, asOf). */
-export async function loadWardPulse(url: URL) {
+export async function loadWardPulse(url: URL, cookies: Cookies) {
 	const data = await getDataset();
 	const q = url.searchParams;
 	const requestedAsOf = q.get('asOf');
@@ -55,9 +57,10 @@ export async function loadWardPulse(url: URL) {
 	const busiest = wardCodes
 		.map((code) => ({ code, n: recentFirst.filter((i) => i.ward === code).length }))
 		.sort((a, b) => b.n - a.n)[0].code;
-	const ward = wardCodes.includes(q.get('ward') ?? '')
-		? q.get('ward')!
-		: (alerts[0]?.ward ?? busiest);
+	// Ward: the URL, else the one chosen last on any page, else the most urgent alert's.
+	const requestedWard = wardCodes.includes(q.get('ward') ?? '') ? q.get('ward')! : undefined;
+	if (requestedWard) rememberWard(cookies, requestedWard);
+	const ward = requestedWard ?? rememberedWard(cookies, wardCodes) ?? alerts[0]?.ward ?? busiest;
 
 	// Default specimen: the ward's commonest one over 12 months.
 	const wardAnnual = selectIsolates(data.isolates, { ward }, windows.annual);

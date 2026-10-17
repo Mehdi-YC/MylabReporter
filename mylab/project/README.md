@@ -50,6 +50,18 @@ The assistant is a chat at the bottom right of every page (`/ask` still works as
 Visual system (IBM Plex, medical teal / slate navy, red and amber only for anomalies) is defined as
 Tailwind theme tokens in `src/routes/layout.css`.
 
+## Admin: importing laboratory CSV files (`/admin`)
+
+1. Put the administrators' addresses in `.env`: `ADMIN_EMAILS=lab.admin@example.org` (comma-separated).
+2. Open `/admin/login` and create the account (only listed addresses can), then sign in.
+3. Upload one or more CSV files with the dataset's columns (templates on the page). Each file's type
+   is recognised from its header; **Check** validates without saving, **Import** writes the valid
+   rows in one transaction (new rows added, existing ones corrected) and every view is recomputed.
+
+Rows are checked against the database and the other files of the same upload (unknown codes,
+patients, cultures or isolates, future dates, bad S/R values…); rejected rows are listed with their
+line number. Logic: `src/lib/import/labCsv.ts` (pure, tested) and `src/lib/server/import/importLab.ts`.
+
 ## Map (`/map`)
 
 - **Regional view**: the patients' `home_area` (five synthetic areas around Tyks: Centre, North,

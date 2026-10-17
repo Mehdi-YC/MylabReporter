@@ -185,13 +185,16 @@
 	<div class="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
 		{#each data.wards as ward (ward.code)}
 			{@const tile = LEVEL_TILE[data.wardStatus[ward.code] ?? 'none']}
-			<div class={['rounded-lg border px-3 py-2 transition-colors', tile.box]}>
+			<a
+				href="{resolve('/')}?{new URLSearchParams({ ward: ward.code, asOf: data.asOf }).toString()}"
+				class={['rounded-lg border px-3 py-2 transition hover:shadow-sm', tile.box]}
+			>
 				<div class="font-mono text-sm font-semibold">{ward.code}</div>
 				<div class="truncate text-[11px] text-slate-500">{wardName(ward.code)}</div>
 				<div class={['mt-1 text-xs font-medium', tile.text]}>
 					{t.alerts.levels[data.wardStatus[ward.code] ?? 'none']}
 				</div>
-			</div>
+			</a>
 		{/each}
 	</div>
 </section>

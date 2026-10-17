@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { alertReasons, alertTitle } from '#lib/alertText.ts';
+	import { askAei } from '#lib/askBus.ts';
 	import { formatPercent, formatRange, messages } from '#lib/i18n.ts';
 	import type { Proportion } from '#lib/amr/stats.ts';
 	import type { PageProps } from './$types';
@@ -83,7 +84,7 @@
 
 <form
 	method="GET"
-	class="-mx-4 -mt-6 mb-6 border-b border-slate-200 bg-white px-4 py-3 sm:-mx-8 sm:px-8"
+	class="sticky top-0 z-30 -mx-4 -mt-6 mb-6 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8"
 >
 	<input type="hidden" name="view" value={data.input.view} />
 	{#if data.input.view === 'organism'}<input
@@ -289,20 +290,29 @@
 				{t.pulse.changesTitle}
 			</h2>
 			{#each data.changes as c (c.organism + c.code)}
-				<a
-					href="{resolve('/')}?{q({
-						view: 'ward',
-						organism: null,
-						cellOrg: c.organism,
-						cellAb: c.code
-					})}#detail"
-					class="rounded-md border-b border-slate-100 py-2 last:border-0 hover:bg-slate-50"
-				>
-					<span class="block text-sm text-slate-600 italic">{c.organism}</span>
-					<span class="block font-semibold"
-						>{t.pulse.changeLine(abName(c.code), pct(c.recent), pct(c.annual))}</span
+				<div class="flex items-start gap-2 border-b border-slate-100 py-2 last:border-0">
+					<a
+						href="{resolve('/')}?{q({
+							view: 'ward',
+							organism: null,
+							cellOrg: c.organism,
+							cellAb: c.code
+						})}#detail"
+						class="min-w-0 flex-1 rounded-md hover:bg-slate-50"
 					>
-				</a>
+						<span class="block text-sm text-slate-600 italic">{c.organism}</span>
+						<span class="block font-semibold"
+							>{t.pulse.changeLine(abName(c.code), pct(c.recent), pct(c.annual))}</span
+						>
+					</a>
+					<button
+						type="button"
+						class="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-teal-800 hover:bg-teal-50"
+						onclick={() =>
+							askAei(t.chat.askAbout(c.organism, abName(c.code), wardName(data.input.ward)))}
+						>{t.chat.ask}</button
+					>
+				</div>
 			{:else}
 				<p class="text-sm text-slate-600">{t.pulse.noChanges}</p>
 			{/each}

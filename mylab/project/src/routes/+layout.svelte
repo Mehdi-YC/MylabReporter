@@ -3,7 +3,7 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import { formatDate, formatDateTime, messages } from '#lib/i18n.ts';
 	import AskChat from '#lib/components/AskChat.svelte';
 	import type { LayoutProps } from './$types';
@@ -20,6 +20,12 @@
 		{ label: t.nav.advisor, route: '/advisor', href: resolve('/advisor') },
 		{ label: t.nav.map, route: '/map', href: resolve('/map') }
 	]);
+
+	// Keep the date being looked at when moving between pages.
+	const asOfSuffix = $derived.by(() => {
+		const asOf = page.url.searchParams.get('asOf');
+		return asOf ? `?asOf=${encodeURIComponent(asOf)}` : '';
+	});
 
 	// The ward-station view is a kiosk: no application chrome.
 	const kiosk = $derived(page.route.id === '/station');
@@ -69,6 +75,13 @@
 	</form>
 {/snippet}
 
+{#if navigating.to}
+	<div
+		class="fixed inset-x-0 top-0 z-[60] h-0.5 animate-pulse bg-teal-600"
+		aria-hidden="true"
+	></div>
+{/if}
+
 {#if kiosk}
 	{@render children()}
 {:else}
@@ -110,7 +123,7 @@
 				<nav aria-label={t.nav.label} class="flex flex-wrap gap-1 text-sm">
 					{#each nav as item (item.route)}
 						<a
-							href={item.href}
+							href="{item.href}{asOfSuffix}"
 							aria-current={page.route.id === item.route ? 'page' : undefined}
 							class={[
 								'rounded-md px-2.5 py-1.5 font-medium transition',
@@ -142,13 +155,40 @@
 						>· {t.dataUntil} {formatDate(data.locale, data.sync.lastDate)}</span
 					>
 				</a>
+				<a
+					href={resolve('/admin')}
+					class="flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+				>
+					<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"
+						><rect
+							x="3"
+							y="7"
+							width="10"
+							height="7"
+							rx="1.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.4"
+						/><path
+							d="M5.5 7 V5 A2.5 2.5 0 0 1 10.5 5 V7"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.4"
+						/></svg
+					>{t.admin.nav}</a
+				>
 				{@render languageToggle()}
 			</div>
 		</header>
 
-		<main class="mx-auto max-w-[1440px] px-4 pt-6 pb-24 sm:px-8">
+		<main class="mx-auto max-w-[1440px] px-4 pt-6 pb-10 sm:px-8">
 			{@render children()}
 		</main>
+		<footer class="border-t border-slate-200 bg-white">
+			<div class="mx-auto max-w-[1440px] px-4 pt-4 pb-20 text-xs text-slate-500 sm:px-8">
+				{t.footer}
+			</div>
+		</footer>
 	</div>
 	{#if page.route.id !== '/ask'}
 		<AskChat locale={data.locale} />

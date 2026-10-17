@@ -35,17 +35,15 @@
 			.join(' · ')
 	);
 
-	/** Same patients in the ward antibiogram (per organism), optionally on one drug's trend. */
+	/** Same ward on the resistance page, optionally with one drug's trend open. */
 	function antibiogramQuery(code?: string): string {
 		const params: Record<string, string | undefined> = {
 			ward: data.input.ward,
 			specimen: data.input.specimen,
-			sex: data.input.sex,
-			onset: data.input.onset,
 			asOf: data.input.asOf
 		};
 		const organism = code ? data.trendOrganism[code] : null;
-		if (code && organism) Object.assign(params, { organism, ab: code });
+		if (code && organism) Object.assign(params, { cellOrg: organism, cellAb: code });
 		return new URLSearchParams(
 			Object.entries(params).filter((e): e is [string, string] => !!e[1])
 		).toString();
@@ -151,9 +149,9 @@
 				<span class="text-slate-500">{wardName}</span>
 			</div>
 			<a
-				href="{resolve('/antibiogram')}?{antibiogramQuery()}"
+				href="{resolve('/')}?{antibiogramQuery()}"
 				class="mt-2 inline-block text-teal-700 hover:underline"
-				>Per-organism detail: {data.input.ward} {data.input.specimen} antibiogram →</a
+				>Per-organism detail: {data.input.ward} {data.input.specimen} resistance view →</a
 			>
 			{#if data.context.fallback}
 				<p class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-amber-900">
@@ -254,11 +252,11 @@
 						</div>
 						{#if data.trendOrganism[o.code]}
 							<a
-								href="{resolve('/antibiogram')}?{antibiogramQuery(o.code)}#trend"
+								href="{resolve('/')}?{antibiogramQuery(o.code)}#detail"
 								class="text-[11px] text-teal-700 hover:underline"
 								title="Monthly trend of {abName(o.code)} for {data.trendOrganism[
 									o.code
-								]} in the antibiogram"
+								]} in the resistance view"
 								>trend · <span class="italic">{data.trendOrganism[o.code]}</span></a
 							>
 						{/if}

@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { ASK_EVENT } from '#lib/askBus.ts';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import type { AskEvent } from '#lib/server/ai/assistant.ts';
 	import type { Answer } from '#lib/server/ai/answer.ts';
-	import { messages, type Locale } from '#lib/i18n.ts';
+	import { formatDate, messages, type Locale } from '#lib/i18n.ts';
 
 	let { locale }: { locale: Locale } = $props();
 
@@ -26,6 +28,32 @@
 	let scroller = $state<HTMLDivElement | null>(null);
 	let input = $state<HTMLTextAreaElement | null>(null);
 	const busy = $derived(turns.some((turn) => turn.running));
+
+	// The page's ward and date frame the question unless it says otherwise.
+	let useContext = $state(true);
+	$effect(() => {
+		// A new page brings its own filters back.
+		void page.url.href;
+		useContext = true;
+	});
+	const pageData = $derived(
+		page.data as {
+			input?: { ward?: string };
+			asOf?: string;
+			wards?: { code: string; nameFi: string; nameEn: string }[];
+		}
+	);
+	const context = $derived({
+		ward: pageData.input?.ward ?? page.url.searchParams.get('ward') ?? undefined,
+		asOf: pageData.asOf ?? page.url.searchParams.get('asOf') ?? undefined
+	});
+	const contextLabel = $derived.by(() => {
+		const w = pageData.wards?.find((x) => x.code === context.ward);
+		const ward = w ? (locale === 'fi' ? w.nameFi : w.nameEn) : context.ward;
+		return [ward, context.asOf ? formatDate(locale, context.asOf) : null]
+			.filter(Boolean)
+			.join(' · ');
+	});
 
 	function apply(turn: Turn, event: AskEvent) {
 		if (event.type === 'status') turn.status = event.message;
@@ -65,7 +93,7 @@
 			const response = await fetch(resolve('/ask'), {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ question: text })
+				body: JSON.stringify({ question: text, context: useContext ? context : {} })
 			});
 			if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
 			const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -86,6 +114,18 @@
 			turn.status = null;
 		}
 	}
+
+	// Other pages open the chat with a ready-made question (askAei).
+	onMount(() => {
+		const handler = (event: Event) => {
+			const q = (event as CustomEvent<{ question: string }>).detail?.question;
+			if (!q) return;
+			open = true;
+			ask(q);
+		};
+		window.addEventListener(ASK_EVENT, handler);
+		return () => window.removeEventListener(ASK_EVENT, handler);
+	});
 
 	async function toggle() {
 		open = !open;
@@ -191,9 +231,12 @@
 							</p>
 							<p class="text-slate-700">{turn.answer.summary}</p>
 							<a
-								href="{resolve(turn.answer.link.route)}?{turn.answer.link.query}"
-								class="mt-2 inline-block text-sm font-semibold text-teal-700 hover:underline"
-								onclick={() => (open = false)}>{t.openView} →</a
+								href="{resolve(turn.answer.link.route)}?{turn.answer.link.query}#detail"
+								class="mt-2 flex items-center justify-between gap-2 rounded-md bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-100"
+								onclick={() => (open = false)}
+								><span class="min-w-0 truncate">{turn.answer.title}</span><span class="shrink-0"
+									>{t.openView} →</span
+								></a
 							>
 						</div>
 					{/if}
@@ -206,6 +249,18 @@
 			{/each}
 		</div>
 
+		{#if useContext && contextLabel}
+			<div
+				class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
+			>
+				<span class="truncate">{t.context(contextLabel)}</span>
+				<button
+					type="button"
+					class="shrink-0 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-200"
+					onclick={() => (useContext = false)}>{t.ignoreContext} ×</button
+				>
+			</div>
+		{/if}
 		<form
 			class="flex items-end gap-2 border-t border-slate-200 p-3"
 			onsubmit={(e) => {
