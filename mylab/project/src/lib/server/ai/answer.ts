@@ -1,12 +1,12 @@
 import {
 	AGE_GROUPS,
 	alertWarnings,
-	bestAvailable,
 	bestCombination,
 	DRUG_NOTES,
-	narrowestAdequate,
+	empiricChoice,
 	organismMix,
 	rankOptions,
+	RESERVE,
 	SITES
 } from '#lib/amr/advisor.ts';
 import { detectAnomalies, type Alert } from '#lib/amr/anomalies.ts';
@@ -265,9 +265,12 @@ function therapyAnswer(intent: Intent, data: AnswerData, asOf: string): Answer {
 	const allowed = (code: string) =>
 		site === 'cystitis' || DRUG_NOTES[code]?.tag !== 'lower UTI only';
 	const target = 0.8;
-	const best = narrowestAdequate(options, target, allowed);
-	const fallbackOption = best ? null : bestAvailable(options, allowed);
-	const combination = best ? null : bestCombination(context, options, allowed);
+	// Same stewardship rule as the pages: reserve drugs only as the fallback.
+	const choice = empiricChoice(options, target, allowed);
+	const best = choice.adequate ? choice.pick : null;
+	const fallbackOption = choice.adequate ? null : choice.pick;
+	const firstLine = (code: string) => allowed(code) && !RESERVE.includes(code);
+	const combination = best ? null : bestCombination(context, options, firstLine);
 	const name = (code: string) => data.antibiotics.find((a) => a.code === code)?.name ?? code;
 
 	const profile = [
@@ -285,7 +288,7 @@ function therapyAnswer(intent: Intent, data: AnswerData, asOf: string): Answer {
 			`Narrowest agent covering at least 80 %: ${name(best.code)}, ${fmt(share(best.coverage))} of isolates susceptible.`
 		);
 	else {
-		lines.push('No single agent reaches 80 % coverage without an active warning.');
+		lines.push('No first-line agent reaches 80 % coverage without an active warning.');
 		if (fallbackOption)
 			lines.push(
 				`Best single agent: ${name(fallbackOption.code)} (${fmt(share(fallbackOption.coverage))}).`
@@ -293,6 +296,10 @@ function therapyAnswer(intent: Intent, data: AnswerData, asOf: string): Answer {
 		if (combination)
 			lines.push(
 				`Best combination: ${combination.codes.map(name).join(' + ')} (${fmt(share(combination.coverage))}).`
+			);
+		if (choice.reserve)
+			lines.push(
+				`Reserve option for severe cases only: ${name(choice.reserve.code)} (${fmt(share(choice.reserve.coverage))}).`
 			);
 	}
 	if (wardAlerts.length)
@@ -321,6 +328,9 @@ function therapyAnswer(intent: Intent, data: AnswerData, asOf: string): Answer {
 				: null,
 			bestCombination: combination
 				? { antibiotics: combination.codes.map(name), coverage: share(combination.coverage) }
+				: null,
+			reserveForSevereCases: choice.reserve
+				? { antibiotic: name(choice.reserve.code), coverage: share(choice.reserve.coverage) }
 				: null,
 			options: options
 				.filter((o) => allowed(o.code))

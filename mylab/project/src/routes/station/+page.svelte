@@ -241,6 +241,9 @@
 					{#if !e.adequate}<div class="mt-0.5 text-sm text-amber-800">
 							{t.pulse.noAdequate}
 						</div>{/if}
+					{#if e.reserve}<div class="mt-0.5 text-sm text-rose-700">
+							{t.pulse.reserveSevere(abName(e.reserve.code), pct(e.reserve.coverage))}
+						</div>{/if}
 				</div>
 			{/each}
 			{#if data.warned.length}

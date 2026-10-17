@@ -84,29 +84,59 @@ export function organismMix(isolates: IsolateRecord[]): OrganismShare[] {
 const BETA_LACTAMS = ['AMP', 'MEC', 'TZP', 'CXM', 'CRO', 'CAZ', 'MEM'];
 const ESBL_AFFECTED = ['AMP', 'CXM', 'CRO', 'CAZ'];
 
-/** Turns the active alerts of a ward into per-drug warnings. */
-export function alertWarnings(alerts: Alert[]): Record<string, string[]> {
-	const out: Record<string, string[]> = {};
-	const add = (code: string, text: string) => (out[code] ??= []).push(text);
+/** Why an active alert weakens a drug, as data the pages can word in Finnish or English. */
+export type WarningItem =
+	| { kind: 'rise'; organism: string; observed: number; expected: number }
+	| { kind: 'esbl' | 'mrsa'; cases: number }
+	| { kind: 'cpe' | 'vre' };
+
+/** Turns the active alerts of a ward into per-drug warning items. */
+export function alertWarningItems(alerts: Alert[]): Record<string, WarningItem[]> {
+	const out: Record<string, WarningItem[]> = {};
+	const add = (code: string, item: WarningItem) => {
+		const list = (out[code] ??= []);
+		if (!list.some((x) => JSON.stringify(x) === JSON.stringify(item))) list.push(item);
+	};
 	for (const a of alerts) {
-		if (a.kind === 'resistance-rise' && a.antibiotic) {
-			add(
-				a.antibiotic,
-				`${a.organism}: ${Math.round(a.observed * 100)} % resistant in the last 4 weeks (baseline ${Math.round(a.expected * 100)} %)`
-			);
+		if (a.kind === 'resistance-rise' && a.antibiotic && a.organism) {
+			add(a.antibiotic, {
+				kind: 'rise',
+				organism: a.organism,
+				observed: Math.round(a.observed * 100),
+				expected: Math.round(a.expected * 100)
+			});
 		}
-		if (a.phenotype === 'esbl') {
-			for (const code of ESBL_AFFECTED) add(code, `Active ESBL cluster (${a.observed} cases)`);
-		}
-		if (a.phenotype === 'mrsa') {
-			for (const code of BETA_LACTAMS)
-				add(code, `Active MRSA cluster (${a.observed} cases): β-lactams do not cover MRSA`);
-		}
-		if (a.phenotype === 'cpe') add('MEM', `CPE case in the ward: carbapenem resistance possible`);
-		if (a.phenotype === 'vre') add('VAN', `VRE case in the ward`);
+		if (a.phenotype === 'esbl')
+			for (const code of ESBL_AFFECTED) add(code, { kind: 'esbl', cases: a.observed });
+		if (a.phenotype === 'mrsa')
+			for (const code of BETA_LACTAMS) add(code, { kind: 'mrsa', cases: a.observed });
+		if (a.phenotype === 'cpe') add('MEM', { kind: 'cpe' });
+		if (a.phenotype === 'vre') add('VAN', { kind: 'vre' });
 	}
-	for (const code of Object.keys(out)) out[code] = [...new Set(out[code])];
 	return out;
+}
+
+/** English wording of a warning (assistant facts and logs). */
+export function warningText(w: WarningItem): string {
+	switch (w.kind) {
+		case 'rise':
+			return `${w.organism}: ${w.observed} % resistant in the last 4 weeks (baseline ${w.expected} %)`;
+		case 'esbl':
+			return `Active ESBL cluster (${w.cases} cases)`;
+		case 'mrsa':
+			return `Active MRSA cluster (${w.cases} cases): β-lactams do not cover MRSA`;
+		case 'cpe':
+			return 'CPE case in the ward: carbapenem resistance possible';
+		case 'vre':
+			return 'VRE case in the ward';
+	}
+}
+
+/** Turns the active alerts of a ward into per-drug warnings (English text). */
+export function alertWarnings(alerts: Alert[]): Record<string, string[]> {
+	return Object.fromEntries(
+		Object.entries(alertWarningItems(alerts)).map(([code, items]) => [code, items.map(warningText)])
+	);
 }
 
 export function rankOptions(
@@ -153,6 +183,36 @@ export function bestAvailable(
 	return (
 		options.find((o) => allowed(o.code) && !o.warnings.length && o.coverage.p !== null) ?? null
 	);
+}
+
+/** Last-resort agents (carbapenems): never the first suggestion when a first-line drug works. */
+export const RESERVE = Object.keys(DRUG_NOTES).filter((code) => DRUG_NOTES[code].tag === 'reserve');
+
+export interface EmpiricChoice {
+	/** Narrowest first-line drug reaching the target, else the best first-line drug. */
+	pick: CoverageOption | null;
+	adequate: boolean;
+	/** When no first-line drug is adequate: the reserve drug that is, for severe cases. */
+	reserve: CoverageOption | null;
+}
+
+/**
+ * Stewardship rule shared by every screen: reserve drugs are offered only as a fallback, after
+ * the first-line drugs, never as the first suggestion.
+ */
+export function empiricChoice(
+	options: CoverageOption[],
+	target: number,
+	allowed: (code: string) => boolean = () => true
+): EmpiricChoice {
+	const firstLine = (code: string) => allowed(code) && !RESERVE.includes(code);
+	const best = narrowestAdequate(options, target, firstLine);
+	if (best) return { pick: best, adequate: true, reserve: null };
+	return {
+		pick: bestAvailable(options, firstLine),
+		adequate: false,
+		reserve: narrowestAdequate(options, target, (code) => allowed(code) && RESERVE.includes(code))
+	};
 }
 
 /** Organisms most often left uncovered by a drug, as a share of all isolates in the context. */

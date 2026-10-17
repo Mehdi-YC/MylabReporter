@@ -6,9 +6,8 @@ import { monthlyTrend, selectIsolates, type IsolateFilter } from '#lib/amr/antib
 import { wardLevels, type Alert } from '#lib/amr/anomalies.ts';
 import {
 	alertWarnings,
-	bestAvailable,
 	DRUG_NOTES,
-	narrowestAdequate,
+	empiricChoice,
 	rankOptions,
 	type Site
 } from '#lib/amr/advisor.ts';
@@ -153,16 +152,17 @@ export async function loadWardPulse(url: URL, cookies: Cookies) {
 	const empiric = SITES_FOR[specimen].map(({ site, key }) => {
 		const allowed = (code: string) =>
 			site === 'cystitis' || DRUG_NOTES[code]?.tag !== 'lower UTI only';
-		const best = narrowestAdequate(options, 0.8, allowed);
-		const fallback = best ? null : bestAvailable(options, allowed);
-		const pick = best ?? fallback;
+		// First-line drugs first; a reserve drug (meropenem) only as the fallback for severe cases.
+		const choice = empiricChoice(options, 0.8, allowed);
+		const pct = (o: { coverage: { p: number | null } } | null) =>
+			o?.coverage.p === undefined || o.coverage.p === null ? null : o.coverage.p * 100;
 		return {
 			site,
 			key,
-			code: pick?.code ?? null,
-			coverage:
-				pick?.coverage.p === undefined || pick.coverage.p === null ? null : pick.coverage.p * 100,
-			adequate: !!best
+			code: choice.pick?.code ?? null,
+			coverage: pct(choice.pick),
+			adequate: choice.adequate,
+			reserve: choice.reserve ? { code: choice.reserve.code, coverage: pct(choice.reserve) } : null
 		};
 	});
 	const warned = Object.keys(warnings).filter((code) => options.some((o) => o.code === code));

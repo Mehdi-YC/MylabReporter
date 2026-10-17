@@ -252,9 +252,17 @@ describe('buildAnswer', () => {
 		});
 	});
 
-	test('therapy for febrile UTI excludes lower-UTI-only agents', () => {
+	test('therapy for febrile UTI excludes lower-UTI-only agents and keeps meropenem in reserve', () => {
 		const answer = buildAnswer({ type: 'therapy', ward: 'URO', site: 'febrile-uti' }, data);
-		expect((answer.facts.recommended as { antibiotic: string }).antibiotic).toBe('meropenem');
+		// Only meropenem reaches 80 % here: it is offered as the reserve, never as the first choice.
+		expect(answer.facts.recommended).toBeNull();
+		expect((answer.facts.reserveForSevereCases as { antibiotic: string }).antibiotic).toBe(
+			'meropenem'
+		);
+		expect((answer.facts.bestSingleAgent as { antibiotic: string }).antibiotic).not.toBe(
+			'nitrofurantoin'
+		);
+		expect(answer.summary).toContain('Reserve option for severe cases only: meropenem');
 	});
 
 	test('alerts: none in quiet data', () => {

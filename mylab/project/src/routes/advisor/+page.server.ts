@@ -5,14 +5,15 @@ import { selectIsolates, type IsolateFilter } from '#lib/amr/antibiogram.ts';
 import { detectAnomalies } from '#lib/amr/anomalies.ts';
 import {
 	AGE_GROUPS,
+	alertWarningItems,
 	alertWarnings,
-	bestAvailable,
 	bestCombination,
 	coverageGaps,
 	DRUG_NOTES,
-	narrowestAdequate,
+	empiricChoice,
 	organismMix,
 	rankOptions,
+	RESERVE,
 	SITES,
 	type AgeGroup,
 	type Site
@@ -67,9 +68,12 @@ export const load: PageServerLoad = async ({ url, cookies }) => {
 	const options = rankOptions(context, recentIsolates, data.antibiotics, alertWarnings(wardAlerts));
 	const lowerUtiOnly = (code: string) => DRUG_NOTES[code]?.tag === 'lower UTI only';
 	const allowed = (code: string) => site === 'cystitis' || !lowerUtiOnly(code);
-	const best = narrowestAdequate(options, target, allowed);
-	const fallbackOption = best ? null : bestAvailable(options, allowed);
-	const shown = best ?? fallbackOption;
+	// First-line drugs first; a reserve drug only as the fallback for severe cases.
+	const choice = empiricChoice(options, target, allowed);
+	const best = choice.adequate ? choice.pick : null;
+	const fallbackOption = choice.adequate ? null : choice.pick;
+	const shown = choice.pick;
+	const firstLine = (code: string) => allowed(code) && !RESERVE.includes(code);
 
 	return {
 		input: { ward, site, specimen, sex, age, onset, target, asOf },
@@ -93,8 +97,10 @@ export const load: PageServerLoad = async ({ url, cookies }) => {
 		options,
 		best: best?.code ?? null,
 		bestAvailable: fallbackOption?.code ?? null,
+		reserve: choice.reserve?.code ?? null,
+		warningItems: alertWarningItems(wardAlerts),
 		gaps: shown ? coverageGaps(context, shown.code) : [],
-		combination: best ? null : bestCombination(context, options, allowed),
+		combination: best ? null : bestCombination(context, options, firstLine),
 		unsuitable: options.filter((o) => !allowed(o.code)).map((o) => o.code),
 		alerts: wardAlerts.map((a) => ({ id: a.id, severity: a.severity, kind: a.kind }))
 	};

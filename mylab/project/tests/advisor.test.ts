@@ -4,6 +4,7 @@ import {
 	bestCombination,
 	coverage,
 	coverageGaps,
+	empiricChoice,
 	narrowestAdequate,
 	organismMix,
 	rankOptions
@@ -73,6 +74,23 @@ describe('rankOptions and narrowestAdequate', () => {
 	test('skips drugs with an active warning', () => {
 		const options = rankOptions(isolates, [], ANTIBIOTICS, { NIT: ['cluster'] });
 		expect(narrowestAdequate(options, 0.9)?.code).toBe('CRO');
+	});
+});
+
+describe('empiricChoice (stewardship)', () => {
+	test('a first-line drug that reaches the target wins over the reserve', () => {
+		const iso = [...cohort(36, { CRO: 'S', MEM: 'S' }), ...cohort(4, { CRO: 'R', MEM: 'S' })];
+		const choice = empiricChoice(rankOptions(iso, [], ANTIBIOTICS, {}), 0.8);
+		expect(choice).toMatchObject({ adequate: true, reserve: null });
+		expect(choice.pick?.code).toBe('CRO');
+	});
+
+	test('when only the reserve reaches the target, it is the fallback, not the pick', () => {
+		const iso = [...cohort(25, { CRO: 'S', MEM: 'S' }), ...cohort(15, { CRO: 'R', MEM: 'S' })];
+		const choice = empiricChoice(rankOptions(iso, [], ANTIBIOTICS, {}), 0.8);
+		expect(choice.adequate).toBe(false);
+		expect(choice.pick?.code).toBe('CRO');
+		expect(choice.reserve?.code).toBe('MEM');
 	});
 });
 
