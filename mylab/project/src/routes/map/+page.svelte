@@ -146,26 +146,6 @@
 				</select>
 			</label>
 		{/if}
-		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">Ward</span>
-			<select name="ward" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
-				<option value="" selected={!data.filter.ward}>All wards</option>
-				{#each data.wards as w (w.code)}
-					<option value={w.code} selected={data.filter.ward === w.code}
-						>{w.code} · {w.nameEn}</option
-					>
-				{/each}
-			</select>
-		</label>
-		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">Specimen</span>
-			<select name="specimen" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
-				<option value="" selected={!data.filter.specimen}>All specimens</option>
-				{#each ['urine', 'blood', 'wound'] as s (s)}
-					<option value={s} selected={data.filter.specimen === s}>{s}</option>
-				{/each}
-			</select>
-		</label>
 		<fieldset class="text-sm">
 			<legend class="mb-1 font-medium text-slate-700">Period</legend>
 			<div class="flex gap-2">
@@ -190,18 +170,55 @@
 				{/each}
 			</div>
 		</fieldset>
-		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">Date</span>
-			<input
-				type="date"
-				name="asOf"
-				value={data.asOf}
-				min={data.range.first}
-				max={data.range.last}
-				class="w-full rounded-md border-slate-300 text-sm"
-				onchange={submit}
-			/>
-		</label>
+		<!-- Narrowing by ward, specimen or date is rarer: one tap away, values in the summary. -->
+		<details class="rounded-md border border-slate-200 text-sm" open={!!data.filter.ward}>
+			<summary
+				class="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-slate-600 [&::-webkit-details-marker]:hidden"
+			>
+				<span
+					><span class="font-medium text-slate-800">More filters</span> · {data.filter.ward ??
+						'all wards'} · {data.filter.specimen ?? 'all specimens'} · {data.asOf}</span
+				><span aria-hidden="true" class="text-xs">▾</span>
+			</summary>
+			<div class="space-y-3 border-t border-slate-200 p-3">
+				<label class="block text-sm">
+					<span class="mb-1 block font-medium text-slate-700">Ward</span>
+					<select name="ward" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
+						<option value="" selected={!data.filter.ward}>All wards</option>
+						{#each data.wards as w (w.code)}
+							<option value={w.code} selected={data.filter.ward === w.code}
+								>{w.code} · {w.nameEn}</option
+							>
+						{/each}
+					</select>
+				</label>
+				<label class="block text-sm">
+					<span class="mb-1 block font-medium text-slate-700">Specimen</span>
+					<select
+						name="specimen"
+						class="w-full rounded-md border-slate-300 text-sm"
+						onchange={submit}
+					>
+						<option value="" selected={!data.filter.specimen}>All specimens</option>
+						{#each ['urine', 'blood', 'wound'] as s (s)}
+							<option value={s} selected={data.filter.specimen === s}>{s}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="block text-sm">
+					<span class="mb-1 block font-medium text-slate-700">Date</span>
+					<input
+						type="date"
+						name="asOf"
+						value={data.asOf}
+						min={data.range.first}
+						max={data.range.last}
+						class="w-full rounded-md border-slate-300 text-sm"
+						onchange={submit}
+					/>
+				</label>
+			</div>
+		</details>
 		<h2 class="pt-2 font-semibold">European view</h2>
 		<label class="block text-sm">
 			<span class="mb-1 block font-medium text-slate-700">EARS-Net indicator</span>

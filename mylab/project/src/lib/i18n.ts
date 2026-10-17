@@ -64,6 +64,33 @@ const fi = {
 	coverage: 'kattavuus 12 kk',
 	notTested: 'ei raportoida',
 	decisionSupport: 'Päätöksenteon tuki. Ei korvaa paikallisia hoitosuosituksia.',
+	forecast: {
+		title: 'Ennuste',
+		rising: (slope: string) => `Nousee tasaisesti: +${slope} %-yksikköä kuukaudessa`,
+		falling: (slope: string) => `Laskee tasaisesti: ${slope} %-yksikköä kuukaudessa`,
+		stable: 'Ei tasaista suuntausta viimeisen 24 kuukauden aikana',
+		months: (m: number) => (m < 1.5 ? 'kuukauden' : `${Math.round(m)} kuukauden`),
+		reach: (when: string) =>
+			`Tällä vauhdilla 20 % saavutetaan noin ${when} kuluttua — kattavuus laskisi alle 80 %:n tavoitteen.`,
+		above: 'Jo yli 20 % — ei sovellu empiiriseen hoitoon.',
+		expected: (h: number, v: string) => `Odotettu ${h} kk:n päästä: ${v}`,
+		badge: 'Nousee tasaisesti',
+		legend: '↗ = tasainen nousu 24 kuukauden aikana (p < 0,01)',
+		changesTitle: 'Hitaasti nousevat',
+		line: (ab: string, now: string, slope: string) => `${ab}: nyt ${now}, +${slope} %-yks./kk`,
+		threshold: '20 % = 80 % kattavuus',
+		projection: 'ennuste',
+		method:
+			'Cochran–Armitage-trenditesti tätä kuukautta edeltäneiltä 24 täydeltä kuukaudelta; suora ennuste isolaattimäärillä painotettuna. Suuntaa antava — ei ennusta epidemiaa.'
+	},
+	filters: {
+		latest: 'Uusin tieto',
+		viewing: (d: string) => `Tilanne ${d}`,
+		backToLatest: 'Takaisin uusimpaan',
+		dateHelp: 'Katso tilanne aiempana päivänä',
+		close: 'Valmis',
+		autoWindow: 'valittu automaattisesti: alle 30 isolaattia 4 viikossa'
+	},
 	pulse: {
 		title: 'Osaston pulssi',
 		subtitle: (specimen: string) =>
@@ -269,6 +296,17 @@ const fi = {
 		modelAnswer: 'Vastaus',
 		openView: 'Avaa näkymä',
 		context: (scope: string) => `Kysymys koskee: ${scope}`,
+		fromPage: (fields: string) => `Sivun suodattimista: ${fields}`,
+		fields: {
+			ward: 'osasto',
+			asOf: 'päivä',
+			specimen: 'näyte',
+			organism: 'mikrobi',
+			antibiotic: 'antibiootti',
+			site: 'infektio',
+			sex: 'sukupuoli',
+			age: 'ikä'
+		},
 		ignoreContext: 'Älä rajaa sivun mukaan',
 		askAbout: (org: string, ab: string, ward: string) =>
 			`Miten ${org}-bakteerin ${ab}-resistenssi on kehittynyt osastolla ${ward}?`,
@@ -397,6 +435,33 @@ const en: Messages = {
 	coverage: 'coverage 12 mo',
 	notTested: 'not reported',
 	decisionSupport: 'Decision support. Does not replace local treatment guidelines.',
+	forecast: {
+		title: 'Outlook',
+		rising: (slope: string) => `Rising steadily: +${slope} points a month`,
+		falling: (slope: string) => `Falling steadily: ${slope} points a month`,
+		stable: 'No steady trend over the last 24 months',
+		months: (m: number) => (m < 1.5 ? 'a month' : `${Math.round(m)} months`),
+		reach: (when: string) =>
+			`At this pace it reaches 20 % in about ${when} — coverage would fall below the 80 % target.`,
+		above: 'Already above 20 % — keep it out of empirical use.',
+		expected: (h: number, v: string) => `Expected in ${h} months: ${v}`,
+		badge: 'Rising steadily',
+		legend: '↗ = steady rise over 24 months (p < 0.01)',
+		changesTitle: 'Slowly rising',
+		line: (ab: string, now: string, slope: string) => `${ab}: ${now} now, +${slope} pts a month`,
+		threshold: '20 % = 80 % coverage',
+		projection: 'projection',
+		method:
+			'Cochran–Armitage test for trend on the 24 complete months before this one; straight-line projection weighted by isolates. Indicative — it does not predict outbreaks.'
+	},
+	filters: {
+		latest: 'Latest data',
+		viewing: (d: string) => `Situation on ${d}`,
+		backToLatest: 'Back to latest',
+		dateHelp: 'Look at the situation on an earlier date',
+		close: 'Done',
+		autoWindow: 'chosen automatically: fewer than 30 isolates in 4 weeks'
+	},
 	pulse: {
 		title: 'Ward Pulse',
 		subtitle: (specimen: string) =>
@@ -595,6 +660,17 @@ const en: Messages = {
 		modelAnswer: 'Answer',
 		openView: 'Open the view',
 		context: (scope: string) => `Question about: ${scope}`,
+		fromPage: (fields: string) => `From the page filters: ${fields}`,
+		fields: {
+			ward: 'ward',
+			asOf: 'date',
+			specimen: 'specimen',
+			organism: 'organism',
+			antibiotic: 'antibiotic',
+			site: 'infection',
+			sex: 'sex',
+			age: 'age'
+		},
 		ignoreContext: 'Do not use the page filters',
 		askAbout: (org: string, ab: string, ward: string) =>
 			`How has ${org} resistance to ${ab} evolved in ${ward}?`,

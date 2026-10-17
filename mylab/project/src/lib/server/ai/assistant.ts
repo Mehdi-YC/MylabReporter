@@ -6,8 +6,10 @@ import {
 	mergeIntents,
 	questionLanguage,
 	validateIntent,
-	type Intent
+	type Intent,
+	type QuestionType
 } from './intent';
+import { AGE_GROUPS, SITES } from '#lib/amr/advisor.ts';
 import type { ChatMessage, LlmProvider } from './provider';
 
 /** How the question was turned into an intent. */
@@ -21,7 +23,7 @@ export type AskEvent =
 			via: IntentSource;
 			dropped: string[];
 			/** Fields taken from the page the question was asked on. */
-			fromContext: ('ward' | 'asOf')[];
+			fromContext: ContextField[];
 	  }
 	| { type: 'answer'; answer: Answer }
 	| { type: 'token'; text: string }
@@ -83,10 +85,44 @@ export function unsupportedNumbers(text: string, facts: unknown, question = ''):
  * in it comes from the surveillance functions. Without a model (or when it
  * fails) the deterministic answer is still complete.
  */
-/** What the user is looking at when asking: the page's ward and reference date. */
+/**
+ * What the user is looking at when asking: the page's filters (ward, date, specimen), the cell
+ * they opened (organism × antibiotic) and, on the advisor, the patient profile.
+ */
 export interface AskContext {
 	ward?: string;
 	asOf?: string;
+	specimen?: string;
+	organism?: string;
+	antibiotic?: string;
+	site?: string;
+	sex?: string;
+	age?: string;
+}
+export type ContextField = keyof AskContext;
+
+/** Page fields that make sense for each kind of question (ward and date apply to all). */
+const CONTEXT_FIELDS: Record<QuestionType, ContextField[]> = {
+	resistance: ['specimen', 'organism', 'antibiotic'],
+	therapy: ['site', 'sex', 'age'],
+	alerts: []
+};
+
+/** The page's value for a field, when it is a code the dataset knows. */
+function contextValue(field: ContextField, context: AskContext, data: AnswerData): string | null {
+	const v = context[field];
+	if (!v) return null;
+	const ok: Record<ContextField, () => boolean> = {
+		ward: () => data.wards.some((w) => w.code === v),
+		asOf: () => v >= data.firstDate && v <= data.lastDate,
+		specimen: () => ['urine', 'blood', 'wound'].includes(v),
+		organism: () => data.organisms.includes(v),
+		antibiotic: () => data.antibiotics.some((a) => a.code === v),
+		site: () => v in SITES,
+		sex: () => v === 'F' || v === 'M',
+		age: () => v in AGE_GROUPS
+	};
+	return ok[field]() ? v : null;
 }
 
 /** "In the whole hospital": the page's ward must not narrow the answer. */
@@ -159,24 +195,19 @@ export async function* ask(
 		}
 	}
 	// Fill what the question leaves open from the page it was asked on.
-	const fromContext: ('ward' | 'asOf')[] = [];
-	if (
-		!intent.ward &&
-		context.ward &&
-		data.wards.some((w) => w.code === context.ward) &&
-		!WHOLE_HOSPITAL.test(question)
-	) {
-		intent = { ...intent, ward: context.ward };
-		fromContext.push('ward');
-	}
-	if (
-		!intent.asOf &&
-		context.asOf &&
-		context.asOf >= data.firstDate &&
-		context.asOf <= data.lastDate
-	) {
-		intent = { ...intent, asOf: context.asOf };
-		fromContext.push('asOf');
+	const fromContext: ContextField[] = [];
+	const fill = (field: ContextField) => {
+		const value = contextValue(field, context, data);
+		if (!value || intent[field] !== undefined) return;
+		intent = { ...intent, [field]: value } as Intent;
+		fromContext.push(field);
+	};
+	if (!WHOLE_HOSPITAL.test(question)) fill('ward');
+	fill('asOf');
+	for (const field of CONTEXT_FIELDS[intent.type]) {
+		// The opened cell's drug belongs to its organism: not to another one the question names.
+		if (field === 'antibiotic' && intent.organism && intent.organism !== context.organism) continue;
+		fill(field);
 	}
 	yield { type: 'intent', intent, via, dropped, fromContext };
 

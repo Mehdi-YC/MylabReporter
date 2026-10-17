@@ -2,7 +2,18 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDataset } from '#lib/server/amr/dataset.ts';
 import { getProvider } from '#lib/server/ai/index.ts';
-import { ask, type AskEvent } from '#lib/server/ai/assistant.ts';
+import { ask, type AskContext, type AskEvent } from '#lib/server/ai/assistant.ts';
+
+const CONTEXT_KEYS = [
+	'ward',
+	'asOf',
+	'specimen',
+	'organism',
+	'antibiotic',
+	'site',
+	'sex',
+	'age'
+] as const satisfies (keyof AskContext)[];
 import { remember } from '#lib/server/ai/history.ts';
 import type { LlmProvider } from '#lib/server/ai/provider.ts';
 
@@ -11,7 +22,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body = (await request.json().catch(() => null)) as {
 		question?: unknown;
 		useModel?: unknown;
-		context?: { ward?: unknown; asOf?: unknown };
+		context?: Record<string, unknown>;
 	} | null;
 	const question = typeof body?.question === 'string' ? body.question.trim().slice(0, 500) : '';
 	if (!question) error(400, 'Missing question');
@@ -37,10 +48,12 @@ export const POST: RequestHandler = async ({ request }) => {
 			};
 			try {
 				if (setupError) send({ type: 'error', message: setupError });
-				const context = {
-					ward: typeof body?.context?.ward === 'string' ? body.context.ward : undefined,
-					asOf: typeof body?.context?.asOf === 'string' ? body.context.asOf : undefined
-				};
+				// Page filters; the assistant checks each against the dataset before using it.
+				const context: AskContext = {};
+				for (const field of CONTEXT_KEYS) {
+					const value = body?.context?.[field];
+					if (typeof value === 'string' && value.length <= 80) context[field] = value;
+				}
 				for await (const event of ask(question, data, provider, context)) send(event);
 				remember(data.version, question, events);
 			} catch (e) {

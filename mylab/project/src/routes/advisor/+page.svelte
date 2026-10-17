@@ -103,38 +103,58 @@
 				</select>
 			</label>
 		</div>
-		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">Onset</span>
-			<select name="onset" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
-				<option value="" selected={!data.input.onset}>Any</option>
-				<option value="community" selected={data.input.onset === 'community'}
-					>Community / first 2 days</option
-				>
-				<option value="hospital" selected={data.input.onset === 'hospital'}
-					>Hospital day 3 or later</option
-				>
-			</select>
-		</label>
-		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">Coverage target</span>
-			<select name="target" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
-				{#each data.targets as t (t)}
-					<option value={t} selected={data.input.target === t}>{t * 100} %</option>
-				{/each}
-			</select>
-		</label>
-		<label class="block text-sm">
-			<span class="mb-1 block font-medium text-slate-700">Date</span>
-			<input
-				type="date"
-				name="asOf"
-				value={data.input.asOf}
-				min={data.range.first}
-				max={data.range.last}
-				class="w-full rounded-md border-slate-300 text-sm"
-				onchange={submit}
-			/>
-		</label>
+		<!-- Rarely changed: kept one tap away, with the current values in the summary. -->
+		<details class="rounded-md border border-slate-200 text-sm" open={!!data.input.onset}>
+			<summary
+				class="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-slate-600 [&::-webkit-details-marker]:hidden"
+			>
+				<span
+					><span class="font-medium text-slate-800">More options</span> · {data.input.onset
+						? data.input.onset === 'hospital'
+							? 'hospital-onset'
+							: 'community'
+						: 'any onset'} · target {data.input.target * 100} % · {data.input.asOf}</span
+				><span aria-hidden="true" class="text-xs">▾</span>
+			</summary>
+			<div class="space-y-3 border-t border-slate-200 p-3">
+				<label class="block text-sm">
+					<span class="mb-1 block font-medium text-slate-700">Onset</span>
+					<select name="onset" class="w-full rounded-md border-slate-300 text-sm" onchange={submit}>
+						<option value="" selected={!data.input.onset}>Any</option>
+						<option value="community" selected={data.input.onset === 'community'}
+							>Community / first 2 days</option
+						>
+						<option value="hospital" selected={data.input.onset === 'hospital'}
+							>Hospital day 3 or later</option
+						>
+					</select>
+				</label>
+				<label class="block text-sm">
+					<span class="mb-1 block font-medium text-slate-700">Coverage target</span>
+					<select
+						name="target"
+						class="w-full rounded-md border-slate-300 text-sm"
+						onchange={submit}
+					>
+						{#each data.targets as t (t)}
+							<option value={t} selected={data.input.target === t}>{t * 100} %</option>
+						{/each}
+					</select>
+				</label>
+				<label class="block text-sm">
+					<span class="mb-1 block font-medium text-slate-700">Date</span>
+					<input
+						type="date"
+						name="asOf"
+						value={data.input.asOf}
+						min={data.range.first}
+						max={data.range.last}
+						class="w-full rounded-md border-slate-300 text-sm"
+						onchange={submit}
+					/>
+				</label>
+			</div>
+		</details>
 		<noscript><button class="rounded-md bg-teal-700 px-3 py-2 text-white">Update</button></noscript>
 	</form>
 
@@ -232,7 +252,7 @@
 
 		<section class="rounded-xl border border-slate-200 bg-white">
 			<div
-				class="grid grid-cols-[minmax(9rem,1.2fr)_2fr_4.5rem_4.5rem] gap-3 border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 uppercase"
+				class="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_3rem_3rem] gap-3 border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 uppercase sm:grid-cols-[minmax(9rem,1.2fr)_2fr_4.5rem_4.5rem]"
 			>
 				<span>Antibiotic</span><span>Coverage, 12 months (95 % CI)</span><span class="text-right"
 					>12 mo</span
@@ -241,13 +261,13 @@
 			{#each data.options as o (o.code)}
 				<div
 					class={[
-						'grid grid-cols-[minmax(9rem,1.2fr)_2fr_4.5rem_4.5rem] items-center gap-3 border-b border-slate-100 px-4 py-2.5 last:border-0',
+						'grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_3rem_3rem] items-center gap-3 border-b border-slate-100 px-4 py-2.5 last:border-0 sm:grid-cols-[minmax(9rem,1.2fr)_2fr_4.5rem_4.5rem]',
 						unsuitable(o.code) && 'opacity-45',
 						o.code === data.best && 'bg-emerald-50/60'
 					]}
 				>
 					<div>
-						<div class="font-medium">
+						<div class="font-medium break-words">
 							{abName(o.code)} <span class="text-xs text-slate-400">{o.code}</span>
 						</div>
 						{#if data.trendOrganism[o.code]}
